@@ -132,6 +132,7 @@ HELP = """MedScope commands (or run: python medscope.py <cmd> <disease>)
   papers <disease> [best]     newest papers, or 'best' = most relevant
   report <disease>     save markdown report
   leads <disease>      Ph2/Ph3 trials + repurposing papers, ranked by evidence stage
+  design <disease>     TOY pipeline (chemicals.py): candidates -> lab -> rat -> human simulators
   watch                emerging diseases: WHO outbreak news + newest novel-pathogen papers
   help | quit   (menu mode remembers your last disease: just type a command alone)"""
 
@@ -143,13 +144,14 @@ def run(cmd, rest, last):
     if best: a.pop()
     d = " ".join(a) or last
     if cmd == "watch": watch(); return last
-    if cmd in ("overview", "bio", "trials", "papers", "report", "leads") and not d: print(w("give a disease name, e.g. overview hiv")); return last
+    if cmd in ("overview", "bio", "trials", "papers", "report", "leads", "design") and not d: print(w("give a disease name, e.g. overview hiv")); return last
     if cmd == "overview": overview(d)
     elif cmd == "bio": show_bio(d)
     elif cmd == "trials": show_trials(d, 10, s)
     elif cmd == "papers": show_papers(d, 10, not best)
     elif cmd == "report": print("saved:", report(d))
     elif cmd == "leads": leads(d)
+    elif cmd == "design": import chemicals; chemicals.pipeline(d)
     elif cmd in ("help", "h", "?"): print(HELP); return last
     else: print("unknown command. type help"); return last
     return d
