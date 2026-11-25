@@ -132,7 +132,7 @@ HELP = """MedScope commands (or run: python medscope.py <cmd> <disease>)
   papers <disease> [best]     newest papers, or 'best' = most relevant
   report <disease>     save markdown report
   leads <disease>      Ph2/Ph3 trials + repurposing papers, ranked by evidence stage
-  design <disease>     TOY pipeline (chemicals.py): candidates -> lab -> rat -> human simulators
+  design <disease>     candidates -> rat PBPK -> human PBPK (chemicals.py; real structures with RDKit)
   search <query>       Europe PMC + OpenAlex in parallel (free, no key)
   brain <disease>      AI research brief (local Ollama = unlimited; or GEMINI_API_KEY / GROQ_API_KEY free tiers)
   watch                emerging diseases: WHO outbreak news + newest novel-pathogen papers

@@ -29,9 +29,13 @@ def openalex(q, n=10):
              "venue": ((x.get("primary_location") or {}).get("source") or {}).get("display_name", ""), "url": x.get("doi") or x.get("id", "")} for x in r]
 
 def pubchem(name):
-    """REAL molecular properties: (MW, XLogP, HBD, HBA)"""
-    p = J(f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{Q(name)}/property/MolecularWeight,XLogP,HBondDonorCount,HBondAcceptorCount/JSON")["PropertyTable"]["Properties"][0]
-    return {"mw": float(p["MolecularWeight"]), "logp": float(p.get("XLogP", 0) or 0), "hbd": p["HBondDonorCount"], "hba": p["HBondAcceptorCount"], "cid": p["CID"]}
+    """REAL molecular properties + structure: mw, XLogP, HBD, HBA, TPSA, SMILES"""
+    for smi in ("ConnectivitySMILES", "CanonicalSMILES"):
+        try: p = J(f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{Q(name)}/property/MolecularWeight,XLogP,HBondDonorCount,HBondAcceptorCount,TPSA,{smi}/JSON")["PropertyTable"]["Properties"][0]; break
+        except Exception as e: err = e
+    else: raise err
+    return {"mw": float(p["MolecularWeight"]), "logp": float(p.get("XLogP", 0) or 0), "hbd": p["HBondDonorCount"], "hba": p["HBondAcceptorCount"],
+            "tpsa": float(p["TPSA"]) if p.get("TPSA") is not None else None, "smiles": next((v for k, v in p.items() if "SMILES" in k), None), "cid": p["CID"]}
 
 def chembl_ic50(name):
     """REAL measured potency: median IC50 (nM) across ChEMBL assays + number of measurements"""
