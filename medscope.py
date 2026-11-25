@@ -135,10 +135,18 @@ HELP = """MedScope commands (or run: python medscope.py <cmd> <disease>)
   design <disease>     candidates -> rat PBPK -> human PBPK (chemicals.py; real structures with RDKit)
   search <query>       Europe PMC + OpenAlex in parallel (free, no key)
   brain <disease>      AI research brief (local Ollama = unlimited; or GEMINI_API_KEY / GROQ_API_KEY free tiers)
+  diseases             list per-disease targets (hiv, covid, flu, tb, lung-cancer, ...)
+  check <disease>      validate that disease's model: known GOOD vs BAD drugs (AUC)
+  discover <disease>   full per-disease pipeline (needs RDKit; Vina/ADMET-AI optional)
+  lab add|report|list  log lab results & track REAL prediction accuracy (closes the loop)
+  selftest             what works on this device + offline correctness checks
   watch                emerging diseases: WHO outbreak news + newest novel-pathogen papers
   help | quit   (menu mode remembers your last disease: just type a command alone)"""
 
 def run(cmd, rest, last):
+    if cmd == "selftest": import selftest; selftest.main(); return last
+    if cmd == "diseases": import diseases; diseases.show(); return last
+    if cmd == "lab": import lab; lab.cli(rest.split()); return last
     a = rest.split(); st = {"recruiting": "RECRUITING", "completed": "COMPLETED", "any": None}
     if cmd == "trials" and a and a[-1].lower() in st: s = st[a.pop().lower()]
     else: s = "RECRUITING"
@@ -146,7 +154,7 @@ def run(cmd, rest, last):
     if best: a.pop()
     d = " ".join(a) or last
     if cmd == "watch": watch(); return last
-    if cmd in ("overview", "bio", "trials", "papers", "report", "leads", "design", "search", "brain") and not d: print(w("give a disease name, e.g. overview hiv")); return last
+    if cmd in ("overview", "bio", "trials", "papers", "report", "leads", "design", "search", "brain", "discover", "check") and not d: print(w("give a disease name, e.g. overview hiv")); return last
     if cmd == "overview": overview(d)
     elif cmd == "bio": show_bio(d)
     elif cmd == "trials": show_trials(d, 10, s)
@@ -154,6 +162,14 @@ def run(cmd, rest, last):
     elif cmd == "report": print("saved:", report(d))
     elif cmd == "leads": leads(d)
     elif cmd == "design": import chemicals; chemicals.pipeline(d)
+    elif cmd == "discover":
+        import discover
+        try: discover.run(d.split()[0], dock_on="--nodock" not in rest)
+        except Exception as e: print(w(f"! {e}"))
+    elif cmd == "check":
+        import diseases
+        try: diseases.check(d.split()[0])
+        except Exception as e: print(w(f"! {e}"))
     elif cmd == "search":
         import sources; sec("ALL FREE ENGINES (Europe PMC + OpenAlex, parallel)")
         for x in sources.search_all(d, 8): print(w(f"{x['date']} [{x['src']}] {x['title']}")); print(w(f"{x['venue']} {x['url']}", 4))

@@ -21,16 +21,19 @@ ST = ["lumen", "gut", "liver", "kidney", "heart", "brain", "muscle", "fat", "ski
 IX = {n: i for i, n in enumerate(ST)}
 clamp = lambda x, a, b: max(a, min(b, x))
 
+HEPC = {"human": 120.0, "rat": 117.0}   # hepatocytes, million cells per g liver (approx)
+
 def predict(p, ovr=None):
-    """drug parameters from descriptors p={logp,mw,tpsa}; ovr = measured values that replace predictions"""
+    """drug parameters from descriptors p={logp,mw,tpsa}; ovr = measured/ADMET values replacing predictions:
+    fup, clint (uL/min/mg microsomal), clint_hep (uL/min/1e6 hepatocytes), vss (L/kg), fa, ka, clr (L/h), efflux_brain"""
     o = ovr or {}; lp, mw, tp = p["logp"], p["mw"], p.get("tpsa", 80)
     fa = 1.0 if tp <= 100 and mw <= 500 else clamp(1 - max(tp - 100, 0) / 120 - (.3 if mw > 600 else 0), .05, 1)
     if lp < -1: fa *= .6
     d = {"fup": clamp(1 / (1 + 10 ** (.5 * lp - .2)), .01, 1), "clint": clamp(3 * 10 ** (.35 * lp), .5, 300), "fa": fa,
-         "ka": 1.2 if tp <= 90 else .5, "efflux_brain": .3 if tp > 90 else 1.0}
-    src = {k: "predicted" for k in d}
+         "ka": 1.2 if tp <= 90 else .5, "efflux_brain": .3 if tp > 90 else 1.0, "clint_hep": None, "vss": None, "clr": None}
+    src = {k: "rule-based" for k in d}
     for k, v in o.items():
-        if k in d and v is not None: d[k] = v; src[k] = "measured"
+        if k in d and v is not None: d[k] = v; src[k] = o.get("_src", {}).get(k, "measured/model")
     return d, src
 
 RT = {"liver": .45, "kidney": .4, "heart": .3, "brain": .1, "muscle": .15, "fat": .05, "skin": .3, "rest": .3, "gut": .3, "lung": .3}  # tissue protein binding vs plasma (approx)
@@ -41,16 +44,19 @@ def kp(t, P, fup, plasma=None):
     fw, fnl, fph = TC[t]
     return clamp(fup * (fw + fnl * P + fph * (.3 * P + .7)) + RT[t] * (1 - fup), .2, 60)
 
-def build(p, species, ovr=None):
-    s = SPECIES[species]; bw = s["bw"]; d, src = predict(p, ovr); P = 10 ** clamp(p["logp"], -3, 6)
-    CO = s["qc"] * bw ** .75; V = {k: v * bw for k, v in s["V"].items()}
+def build(p, species, ovr=None, subj=None):
+    s = SPECIES[species]; sj = subj or {}; bw = sj.get("bw", s["bw"]); d, src = predict(p, ovr); d = dict(d)
+    d["fup"] = clamp(d["fup"] * sj.get("fup_scale", 1), .003, 1); P = 10 ** clamp(p["logp"], -3, 6)
+    CO = s["qc"] * bw ** .75 * sj.get("qc_scale", 1); V = {k: v * bw for k, v in s["V"].items()}
     V["art"], V["ven"] = V["blood"] / 3, V["blood"] * 2 / 3; V["lumen"] = 1.0
     V["rest"] = bw - sum(V[k] for k in ("gut", "liver", "kidney", "heart", "brain", "lung", "muscle", "fat", "skin", "blood"))
     Q = {k: v * CO for k, v in s["Q"].items()}; Q["rest"] = CO - sum(Q.values())
-    K = {t: kp(t, P, d["fup"], s["plasma"]) for t in TIS + ["lung"]}
+    K = {t: kp(t, P, d["fup"]) for t in TIS + ["lung"]}
+    if d.get("vss"):   # calibrate tissue partitioning so the model's Vss matches the supplied (measured / ADMET) Vss
+        vt = sum(V[t] * K[t] for t in K); f = clamp((d["vss"] * bw - V["blood"]) / vt, .1, 10); K = {t: k * f for t, k in K.items()}
     if d["efflux_brain"] < 1: K["brain"] *= d["efflux_brain"]
-    clint = d["clint"] * s["mppgl"] * s["liver_g"] * bw * 1e-6 * 60          # L/h
-    clr = d.get("clr") or d["fup"] * s["gfr"] * bw                           # L/h renal
+    clint = (d["clint_hep"] * HEPC[species] if d.get("clint_hep") else d["clint"] * s["mppgl"]) * s["liver_g"] * bw * 1e-6 * 60 * sj.get("clint_scale", 1)
+    clr = (d["clr"] or d["fup"] * s["gfr"] * bw) * sj.get("gfr_scale", 1)
     return dict(s=s, d=d, src=src, CO=CO, V=V, Q=Q, K=K, clint=clint, clr=clr, bw=bw)
 
 def _deriv(y, m):
@@ -79,9 +85,9 @@ def _expm(A, h):
     for _ in range(sq): R = _matmul(R, R)
     return R
 
-def simulate(p, species="human", dose_mg=100.0, hours=48.0, route="po", every=.1, ovr=None, **_):
+def simulate(p, species="human", dose_mg=100.0, hours=48.0, route="po", every=.1, ovr=None, subj=None, **_):
     """returns dict: t, cp (plasma mg/L), tissue conc (mg/L), PK metrics, mass balance, parameters + their source"""
-    m = build(p, species, ovr); n_st = len(ST); A = [[0.0] * n_st for _ in range(n_st)]
+    m = build(p, species, ovr, subj); n_st = len(ST); A = [[0.0] * n_st for _ in range(n_st)]
     for j in range(n_st):
         e = [0.0] * n_st; e[j] = 1.0; col = _deriv(e, m)
         for i in range(n_st): A[i][j] = col[i]
@@ -99,11 +105,11 @@ def simulate(p, species="human", dose_mg=100.0, hours=48.0, route="po", every=.1
     body = sum(y[IX[t]] for t in ST[:13]); mb = body + y[IX["cl_liver"]] + y[IX["cl_kidney"]] + y[IX["fec"]]
     return {"species": species, "route": route, "dose_mg": dose_mg, "t": ts, "cp": cp, "tissue": tis, "cmax": cmax, "tmax": tmax, "auc": auc,
             "kz": kz, "t_half": math.log(2) / kz if kz else None, "mass_balance": mb / dose_mg, "frac_liver_metab": y[IX["cl_liver"]] / dose_mg,
-            "frac_renal": y[IX["cl_kidney"]] / dose_mg, "frac_unabsorbed": y[IX["fec"]] / dose_mg, "params": m["d"], "param_source": m["src"],
+            "frac_renal": y[IX["cl_kidney"]] / dose_mg, "frac_unabsorbed": y[IX["fec"]] / dose_mg, "params": m["d"], "param_source": m["src"], "vss_L": m["V"]["blood"] + sum(m["V"][t] * m["K"][t] for t in m["K"]),
             "clint_Lh": m["clint"], "clr_Lh": m["clr"], "CO_Lh": m["CO"], "Kp": m["K"]}
 
-def bioavailability(p, species="human", dose_mg=100.0, hours=48.0, ovr=None):
-    po = simulate(p, species, dose_mg, hours, "po", ovr=ovr); iv = simulate(p, species, dose_mg, hours, "iv", ovr=ovr)
+def bioavailability(p, species="human", dose_mg=100.0, hours=48.0, ovr=None, subj=None):
+    po = simulate(p, species, dose_mg, hours, "po", ovr=ovr, subj=subj); iv = simulate(p, species, dose_mg, hours, "iv", ovr=ovr, subj=subj)
     return po, iv, po["auc"] / iv["auc"] if iv["auc"] else 0.0
 
 def steady_state(res, tau=24.0):
@@ -121,9 +127,9 @@ def steady_state(res, tau=24.0):
         out.append(tot)
     return out
 
-def dose_for_target(p, species, ic50_nM, mw, ovr=None, target_cover=1.0, tau=24.0, ref_mg=100.0):
+def dose_for_target(p, species, ic50_nM, mw, ovr=None, target_cover=1.0, tau=24.0, ref_mg=100.0, subj=None):
     """dose (mg per interval) so the trough FREE plasma conc >= target_cover x IC50 at steady state (linear PK scaling)"""
-    r = simulate(p, species, ref_mg, 48.0, "po", ovr=ovr); fup = r["params"]["fup"]
+    r = simulate(p, species, ref_mg, 48.0, "po", ovr=ovr, subj=subj); fup = r["params"]["fup"]
     css = steady_state(r, tau); free_trough_nM = min(css) * fup / mw * 1e6
     if free_trough_nM <= 0: return None, r
     return ref_mg * (ic50_nM * target_cover) / free_trough_nM, r

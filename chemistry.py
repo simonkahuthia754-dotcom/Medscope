@@ -100,7 +100,7 @@ def candidates(leads, n=60, seed=7, mw=(200, 600), min_qed=.35, sim=(.25, .95)):
         seen.add(can); par = parent or best; pv = L[par][1]
         pen = min(1.0, .34 * len(a["brenk"]) + 1.0 * len(a["pains"]))
         score = round(min(98, 100 * (.45 * d["qed"] + .30 * min(1, s / .6) + .25 * (1 - pen))), 1)
-        out.append({"name": name, "smiles": can, "known": known, "parent": par, "sim": round(s, 2), "alerts": a, "score": score, "ic50_nM": pv.get("ic50_nM"),
+        out.append({"name": name, "smiles": can, "known": known, "parent": par, "sim": round(s, 2), "alerts": a, "score": score, "ic50_nM": pv.get("ic50_nM") if known else None,
                     "data": pv.get("data", "RDKit"), **d})
     for nm, (m, _) in L.items(): add(Chem.MolToSmiles(m), nm, nm, True)
     pool = []
