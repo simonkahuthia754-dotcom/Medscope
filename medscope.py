@@ -139,11 +139,27 @@ HELP = """MedScope commands (or run: python medscope.py <cmd> <disease>)
   check <disease>      validate that disease's model: known GOOD vs BAD drugs (AUC)
   discover <disease>   full per-disease pipeline (needs RDKit; Vina/ADMET-AI optional)
   lab add|report|list  log lab results & track REAL prediction accuracy (closes the loop)
+  score                evidence-based rating of MedScope (verified vs ceiling)
+  onboard <disease>    add ANY disease automatically (targets, ChEMBL, PDB); or --uniprot ACC --name X for a new pathogen
+  repurpose <disease>  screen ALL approved drugs against that disease's target
+  drug <name>          any drug/product: ingredients, structure, human PBPK, flags
+  combo <a> <b> ...    combination/regimen checks (organ overlap, shared tox, CYP DDI)
   selftest             what works on this device + offline correctness checks
   watch                emerging diseases: WHO outbreak news + newest novel-pathogen papers
   help | quit   (menu mode remembers your last disease: just type a command alone)"""
 
 def run(cmd, rest, last):
+    if cmd == "score": import scorecard; scorecard.main(); return last
+    if cmd == "onboard":
+        import onboard
+        try: onboard.cli(rest.split())
+        except Exception as e: print(w(f"! {e}"))
+        return last
+    if cmd in ("drug", "combo"):
+        import ingredients
+        try: ingredients.cli(cmd, rest.split())
+        except Exception as e: print(w(f"! {e}"))
+        return last
     if cmd == "selftest": import selftest; selftest.main(); return last
     if cmd == "diseases": import diseases; diseases.show(); return last
     if cmd == "lab": import lab; lab.cli(rest.split()); return last
@@ -154,7 +170,7 @@ def run(cmd, rest, last):
     if best: a.pop()
     d = " ".join(a) or last
     if cmd == "watch": watch(); return last
-    if cmd in ("overview", "bio", "trials", "papers", "report", "leads", "design", "search", "brain", "discover", "check") and not d: print(w("give a disease name, e.g. overview hiv")); return last
+    if cmd in ("overview", "bio", "trials", "papers", "report", "leads", "design", "search", "brain", "discover", "check", "repurpose") and not d: print(w("give a disease name, e.g. overview hiv")); return last
     if cmd == "overview": overview(d)
     elif cmd == "bio": show_bio(d)
     elif cmd == "trials": show_trials(d, 10, s)
@@ -165,6 +181,10 @@ def run(cmd, rest, last):
     elif cmd == "discover":
         import discover
         try: discover.run(d.split()[0], dock_on="--nodock" not in rest)
+        except Exception as e: print(w(f"! {e}"))
+    elif cmd == "repurpose":
+        import library
+        try: library.repurpose(d.split()[0])
         except Exception as e: print(w(f"! {e}"))
     elif cmd == "check":
         import diseases

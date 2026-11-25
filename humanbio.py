@@ -59,6 +59,7 @@ def target_expression(symbol):
         lab = e["tissue"]["label"].lower(); l = (e.get("rna") or {}).get("level") or 0
         for o, keys in ORGAN_MAP.items():
             if any(k in lab for k in keys): lv[o] = max(lv.get(o, 0), l)
+    if lv: __import__('state').record('expr_ok', True)
     return lv, sorted({s["event"] for s in t.get("safetyLiabilities") or [] if s.get("event")})
 
 def exposure_flags(exposure, levels, symbol, ratio=.5, level=3):

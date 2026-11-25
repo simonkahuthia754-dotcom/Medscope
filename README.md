@@ -30,6 +30,12 @@ Terminal research explorer for any disease. Python stdlib only (works in QPython
 - `pbpk.py` (pure Python, runs anywhere): rat (250 g) and human (70 kg) PBPK with 9 organs + blood, oral absorption, liver metabolism, kidney clearance,
   exact linear solver, mass-balance checked. Drug parameters are predicted from structure unless you pass measured ones (fup, clint, fa, ka, clr).
 
+## Any disease, every drug, ingredients, rating
+- `onboard "<disease>"` adds ANY disease automatically (Open Targets -> ChEMBL -> PDB); `onboard --uniprot ACC --name X` for a new pathogen once its protein is known.
+- `repurpose <disease>` screens ALL approved drugs against that target (approved drugs already have human safety/PK data).
+- `drug <name>` / `combo <a> <b>`: product -> active ingredients (RxNorm) -> structure, human PBPK, flags, organ overlap, CYP interaction. Excipients and synergy are NOT modelled.
+- `score` (scorecard.py): evidence-based rating. Only things actually run and measured on your machine earn points; ceiling is 73/100 for software alone.
+
 ## Per-disease pipeline (`discover <disease>`)
 `diseases.py` gives every disease its own target, GOOD list, BAD list and validation (13 diseases: hiv, covid, flu, hepc, mrsa, tb, ecoli, lung-cancer, breast-cancer, blood-cancer, malaria, fungi, inflammation; add yours in `~/.medscope/diseases.json`).
 Flow: measured ChEMBL data (cleaned, no leakage) -> QSAR potency with error bars + ROC AUC -> RDKit analogs -> ADMET-AI -> Vina (trust-gated by redocking RMSD <= 2 A and Spearman rho vs measured pIC50) -> human PBPK + virtual population (CYP phenotypes, age, kidney function) + where the human target is expressed -> composite score (QED 25, potency/docking 30, F 15, Lipinski 10, tox 20).

@@ -44,6 +44,7 @@ def run(use_admet=False):
     w2 = lambda x: 100 * sum(v <= 2 for v in x) / len(x); w3 = lambda x: 100 * sum(v <= 3 for v in x) / len(x)
     print(f"\nHalf-life : within 2-fold {w2(ft):.0f}% | within 3-fold {w3(ft):.0f}% | geometric-mean fold error {gm(ft):.2f}")
     print(f"Bioavail. : within 2-fold {w2(ff):.0f}% | within 3-fold {w3(ff):.0f}% | geometric-mean fold error {gm(ff):.2f}")
+    import state; state.record("pk_2fold_admet" if use_admet else "pk_2fold_rule", round(w2(ft)))
     print("Typical published PBPK 'good' benchmark: >=70% within 2-fold. Treat predictions for NEW molecules as less accurate than this.")
     return rows
 

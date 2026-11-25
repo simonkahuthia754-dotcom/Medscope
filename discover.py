@@ -36,7 +36,7 @@ def run(key, top=5, n=60, pop=100, dock_on=True):
     D = diseases.get(key); chemistry.need(); print(f"\n=== {D['key']}: {D['name']} | target: {D['target']} ===")
     if D.get("note"): print("NOTE:", D["note"])
     cid, nm = diseases.resolve_chembl(D); print(f"ChEMBL target {cid} = {nm}   <- check this is the protein you mean")
-    ov = lab.training_overlay(D["key"]); data = potency.fetch(cid, overlay=ov); model = potency.Model(data); print("QSAR:", model.summary())
+    ov = lab.training_overlay(D["key"]); data = potency.fetch(cid, overlay=ov); model = potency.Model(data); print("QSAR:", model.summary()); __import__("state").record("qsar_auc", model.auc) if model.auc else None; __import__("state").record("qsar_rmse", model.rmse) if model.rmse else None
     if ov: print(f"  includes {len(ov)} measurements from YOUR lab")
     if model.n < 30: print("Too little measured data for this target: potency cannot be predicted reliably. Measure leads in a lab (lab.py) or use docking only."); return []
     diseases.check(D["key"], model=model)
@@ -50,7 +50,7 @@ def run(key, top=5, n=60, pop=100, dock_on=True):
         if c["known"]: c["pic50"] = 9 - math.log10(c["ic50_nM"]); c["pot"] = {"confidence": "MEASURED", "sd": .3, "ic50_nM": c["ic50_nM"], "ic50_lo": c["ic50_nM"] / 2, "ic50_hi": c["ic50_nM"] * 2, "maxsim": 1.0, "in_domain": True}
         else:
             c["pot"] = model.predict(c["smiles"]); c["pic50"] = c["pot"]["pic50"] if c["pot"] else None
-    cs = [c for c in cs if c.get("pot") and c["pot"]["in_domain"]]; print(f"Candidates inside the QSAR applicability domain: {len(cs)}")
+    cs = [c for c in cs if c.get("pot") and c["pot"]["in_domain"]]; __import__("state").record("gen_ok", bool(cs)); print(f"Candidates inside the QSAR applicability domain: {len(cs)}")
     sl = sorted(cs, key=lambda c: -(c["pic50"] - c["pot"]["sd"]))[:top * 3]
     if not sl: print("No candidates in domain."); return []
     try:
@@ -70,7 +70,7 @@ def run(key, top=5, n=60, pop=100, dock_on=True):
             cal = docking.calibrate(T, data); trust = rmsd is not None and rmsd <= 2.0 and cal["rho"] is not None and cal["rho"] >= .3
             print(f"Docking {D['pdb']} (ligand {T['lig']}): redock RMSD {rmsd and round(rmsd, 2)} A | rho(Vina, measured pIC50) {cal['rho'] and round(cal['rho'], 2)} -> "
                   + ("TRUSTED as a cross-check" if trust else "NOT trusted (reported, but excluded from the score)"))
-            T["trust"] = trust
+            T["trust"] = trust; st = __import__('state'); st.record('redock_rmsd', round(rmsd, 2)) if rmsd is not None else None; st.record('dock_rho', round(cal['rho'], 2)) if cal['rho'] is not None else None
         except Exception as e: print("Docking unavailable:", e); T = None
     for c in sl:
         a = pr.get(c["smiles"], {}); c["admet"] = {k: admet.get(a, k) for k in ("hERG", "DILI", "AMES")} if a else {}

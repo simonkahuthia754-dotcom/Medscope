@@ -37,13 +37,16 @@ def main():
     chk("rat clears faster than human", lambda: pbpk.simulate(P, "rat", .5, 72)["t_half"] < pbpk.simulate(P, "human", 100, 72)["t_half"])
     chk("Vss override honoured", lambda: abs(pbpk.simulate(P, "human", 100, 48, ovr={"vss": 1.0})["vss_L"] - 70) < 1)
     chk("virtual population runs", lambda: humanbio.population_pk(P, 100, subs=humanbio.population(20), hours=48)["n"] == 20)
-    chk("every disease has its own target + good list, no good/bad overlap", lambda: all(v["target"] and v["good"] and not (set(v["good"]) & set(diseases.bad_for(k))) for k, v in diseases.D.items()))
+    chk("every disease has its own target + good list, no good/bad overlap", lambda: all(v["target"] and v["good"] and not (set(v["good"]) & set(diseases.bad_for(k))) for k, v in diseases.D.items() if k in diseases.BUILTIN))
     def labloop():
-        old = os.environ.get("HOME"); d = tempfile.mkdtemp(); os.environ["HOME"] = d; lab.F = os.path.join(d, "lab.jsonl")
+        old_home, old_f = os.environ.get("HOME"), lab.F; d = tempfile.mkdtemp(); lab.F = os.path.join(d, "lab.jsonl")
         try:
-            lab.add("x", "CCO", 500, 8000, 7.0); lab.add("x", "CCN", 20000, None, 8.0); return lab.training_overlay("x") and lab.failed("x") == ["CCN"] and len(lab.load("x")) == 2
-        finally: os.environ["HOME"] = old or ""
+            lab.add("x", "CCO", 500, 8000, 7.0); lab.add("x", "CCN", 20000, None, 8.0); return bool(lab.training_overlay("x")) and lab.failed("x") == ["CCN"] and len(lab.load("x")) == 2
+        finally:
+            lab.F = old_f
+            if old_home is not None: os.environ["HOME"] = old_home
     chk("lab loop logs, overlays measured data, tracks failures", labloop)
+    import state; state.record("offline_pass", all(ok)); state.record("tier2", bool(t2)); state.record("tier3", bool(t3))
     print(f"\n{sum(ok)}/{len(ok)} offline checks passed")
     return all(ok)
 

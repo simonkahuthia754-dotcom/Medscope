@@ -37,6 +37,7 @@ D = {
     "inflammation": dict(name="Inflammation / pain", target="Cyclooxygenase-2 (PTGS2)", chembl="CHEMBL230", pdb="3LN1", pdb_ok=True, symbol="PTGS2", cyp="CYP2C9",
                          good=["celecoxib", "etoricoxib", "valdecoxib"], skip=[]),
 }
+BUILTIN = set(D)
 try:
     D.update(json.load(open(os.path.join(os.path.expanduser("~"), ".medscope", "diseases.json"))))
 except Exception: pass
