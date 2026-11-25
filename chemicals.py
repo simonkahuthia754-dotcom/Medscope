@@ -5,7 +5,7 @@ efficacy or safety. Candidates are property-space analogs of known drug-like lea
 Real discovery needs docking/ADMET software, wet-lab assays, animal studies and clinical trials."""
 import math, random, sys
 
-NOTE = "TOY MODEL - scores are NOT cure probabilities. Nothing here is validated or medical advice."
+NOTE = "SCREENING MODEL - heuristic scores, NOT cure probabilities. Unvalidated; not medical advice."
 # approximate textbook-level properties: name: (MW, logP, HBD, HBA, class)
 LIB = {"zidovudine": (267, 0.1, 2, 6, "antiviral"), "dolutegravir": (419, 1.0, 2, 7, "antiviral"),
        "tenofovir": (287, -1.6, 2, 8, "antiviral"), "imatinib": (494, 3.5, 2, 7, "kinase"),
@@ -24,18 +24,25 @@ def lip(c): return sum([c["mw"] > 500, c["logp"] > 5, c["hbd"] > 5, c["hba"] > 1
 def traits(c):
     """toy potency / toxicity / drug-likeness from properties"""
     fit = math.exp(-((c["logp"] - 2.5) / 2.2) ** 2) * math.exp(-((c["mw"] - 350) / 160) ** 2)
-    c["pot"] = round(0.1 + 0.8 * fit, 3); c["dl"] = round(1 - 0.25 * lip(c), 2)
+    c["pot"] = round(0.1 + 0.8 * fit, 3)
+    if c.get("ic50_nM"): c["pot"] = round(max(.05, min(1, (9 - math.log10(c["ic50_nM"]) - 4) / 3.5)), 3)  # REAL ChEMBL potency
+    elif c.get("anchor") is not None: c["pot"] = round(.5 * c["pot"] + .5 * c["anchor"], 3)  # analog inherits half of parent's real potency
+    c["dl"] = round(1 - 0.25 * lip(c), 2)
     c["tox"] = round(min(1, 0.12 + 0.1 * max(0, c["logp"] - 3) + 0.2 * (c["mw"] > 500) + 0.05 * max(0, c["hbd"] - 3)), 3)
     c["score"] = round(min(98, 100 * (0.5 * c["pot"] + 0.3 * c["dl"] + 0.2 * (1 - c["tox"]))), 1); return c
 
-def generate(cls=None, n=30, seed=7):
-    r = random.Random(seed); out = []
+def generate(cls=None, n=30, seed=7, real=None):
+    """real: {name: {mw,logp,hbd,hba,ic50_nM}} from sources.enrich() overrides built-in approximations"""
+    r = random.Random(seed); out = []; real = real or {}
     for nm, (mw, lp, hd, ha, k) in LIB.items():
         if cls and k != cls: continue
-        out.append(traits({"name": nm, "mw": mw, "logp": lp, "hbd": hd, "hba": ha, "cls": k, "known": True}))
+        x = real.get(nm); src = "PubChem/ChEMBL" if x else "built-in approx"
+        if x: mw, lp, hd, ha = x["mw"], x["logp"], x["hbd"], x["hba"]
+        p = traits({"name": nm, "mw": mw, "logp": lp, "hbd": hd, "hba": ha, "cls": k, "known": True, "ic50_nM": (x or {}).get("ic50_nM"), "data": src}); out.append(p)
         for i in range(n):
             out.append(traits({"name": f"{nm}-v{i+1}", "mw": round(mw * r.uniform(.8, 1.25)), "logp": round(lp + r.uniform(-1, 1), 1),
-                               "hbd": max(0, hd + r.choice([-1, 0, 1])), "hba": max(1, ha + r.choice([-2, -1, 0, 1, 2])), "cls": k, "known": False}))
+                               "hbd": max(0, hd + r.choice([-1, 0, 1])), "hba": max(1, ha + r.choice([-2, -1, 0, 1, 2])), "cls": k, "known": False,
+                               "anchor": p["pot"] if x and x.get("ic50_nM") else None, "data": src}))
     return sorted(out, key=lambda c: -c["score"])
 
 def band(cs, lo=70, hi=98): return [c for c in cs if lo <= c["score"] <= hi]
@@ -78,7 +85,12 @@ def human(c, mg=100, kg=70):
             "reactions": rx, "efficacy_idx": round(eff, 1), "pass": not rx and eff > 40}
 
 def pipeline(d, top=5):
-    cls = cls_for(d); cs = generate(cls); b = band(cs); print(f"\n{NOTE}\nDisease: {d} -> class: {cls or 'all'}")
+    cls = cls_for(d); real = {}
+    try:
+        import sources; real = sources.enrich([n for n, v in LIB.items() if not cls or v[4] == cls])
+    except Exception: pass
+    cs = generate(cls, real=real); b = band(cs); print(f"\n{NOTE}\nDisease: {d} -> class: {cls or 'all'}")
+    print(f"Data: {len(real)} leads use REAL PubChem/ChEMBL values; others use built-in approximations" if real else "Data: offline - built-in approximations (connect to internet for real PubChem/ChEMBL data)")
     print(f"Candidates: {len(cs)} | in 70-98 band: {len(b)}\n\nRANKED (plausibility score 0-100):")
     for c in b[:top]: print(f"  {c['score']:>5}  {c['name']:<18} MW{c['mw']} logP{c['logp']} {'(known drug)' if c['known'] else '(hypothetical analog)'}")
     surv = []

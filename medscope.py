@@ -133,6 +133,8 @@ HELP = """MedScope commands (or run: python medscope.py <cmd> <disease>)
   report <disease>     save markdown report
   leads <disease>      Ph2/Ph3 trials + repurposing papers, ranked by evidence stage
   design <disease>     TOY pipeline (chemicals.py): candidates -> lab -> rat -> human simulators
+  search <query>       Europe PMC + OpenAlex in parallel (free, no key)
+  brain <disease>      AI research brief (local Ollama = unlimited; or GEMINI_API_KEY / GROQ_API_KEY free tiers)
   watch                emerging diseases: WHO outbreak news + newest novel-pathogen papers
   help | quit   (menu mode remembers your last disease: just type a command alone)"""
 
@@ -144,7 +146,7 @@ def run(cmd, rest, last):
     if best: a.pop()
     d = " ".join(a) or last
     if cmd == "watch": watch(); return last
-    if cmd in ("overview", "bio", "trials", "papers", "report", "leads", "design") and not d: print(w("give a disease name, e.g. overview hiv")); return last
+    if cmd in ("overview", "bio", "trials", "papers", "report", "leads", "design", "search", "brain") and not d: print(w("give a disease name, e.g. overview hiv")); return last
     if cmd == "overview": overview(d)
     elif cmd == "bio": show_bio(d)
     elif cmd == "trials": show_trials(d, 10, s)
@@ -152,6 +154,14 @@ def run(cmd, rest, last):
     elif cmd == "report": print("saved:", report(d))
     elif cmd == "leads": leads(d)
     elif cmd == "design": import chemicals; chemicals.pipeline(d)
+    elif cmd == "search":
+        import sources; sec("ALL FREE ENGINES (Europe PMC + OpenAlex, parallel)")
+        for x in sources.search_all(d, 8): print(w(f"{x['date']} [{x['src']}] {x['title']}")); print(w(f"{x['venue']} {x['url']}", 4))
+    elif cmd == "brain":
+        import brain; ev = [f"paper {p['date']}: {p['title']}" for p in safe(papers, d, 8) or []] + \
+            [f"trial {t['phase']}/{t['status']}: {t['title']} drugs={','.join(t['drugs'])}" for t in safe(trials, d, 8, None) or []]
+        try: n, t = brain.brief(d, ev); sec("AI BRIEF via " + n); print(t); print("\n" + DISC)
+        except RuntimeError as e: print(w("! " + str(e)))
     elif cmd in ("help", "h", "?"): print(HELP); return last
     else: print("unknown command. type help"); return last
     return d
