@@ -106,12 +106,33 @@ def report(d, path=None):
     path = path or os.path.join(os.getcwd(), d.replace(" ", "_") + "_report.md")
     open(path, "w").write(f"# MedScope report: {d}\n_{time.strftime('%Y-%m-%d')}_\n\n```\n{b.getvalue()}\n```\n"); return path
 
+def watch():
+    """emerging/new diseases: WHO outbreak news + newest PubMed on novel pathogens"""
+    sec("WHO DISEASE OUTBREAK NEWS")
+    r = safe(get, "https://www.who.int/api/news/diseaseoutbreaknews?sf_culture=en&$orderby=PublicationDateAndTime%20desc&$top=8")
+    for i in (r or {}).get("value", []): print(w(f"{str(i.get('PublicationDateAndTime',''))[:10]} | {i.get('Title','')}"))
+    show_papers("(novel OR emerging OR outbreak) AND (pathogen OR virus OR infection) AND (\"last 30 days\"[PDat])", 8)
+
+LADDER = "Evidence ladder: lab/animal -> Ph1 safety -> Ph2 signal -> Ph3 proof -> approval. Only Ph3+/approval is real evidence of benefit."
+
+def leads(d):
+    """candidate leads ranked by evidence stage. These are HYPOTHESES, never confirmed cures."""
+    sec("LEADS FOR " + d.upper()); print(w(LADDER))
+    ts = []
+    for ph in ("PHASE3", "PHASE2"):
+        ts += [t for t in safe(trials, d + " " + ph, 10, None) or [] if ph in t["phase"]]
+    for t in ts[:10]: print(w(f"[{t['phase']}|{t['status']}] {', '.join(t['drugs']) or 'n/a'} - {t['title']} {t['url']}"))
+    show_papers(d + " drug repurposing", 6, False)
+    print("\n  Treat everything above as leads to discuss with researchers/clinicians, not as cures.")
+
 HELP = """MedScope commands (or run: python medscope.py <cmd> <disease>)
   overview <disease>   biology + drugs + trials + papers
   bio <disease>        targets & drugs (Open Targets)
   trials <disease> [status]   status: recruiting|completed|any (default recruiting)
   papers <disease> [best]     newest papers, or 'best' = most relevant
   report <disease>     save markdown report
+  leads <disease>      Ph2/Ph3 trials + repurposing papers, ranked by evidence stage
+  watch                emerging diseases: WHO outbreak news + newest novel-pathogen papers
   help | quit   (menu mode remembers your last disease: just type a command alone)"""
 
 def run(cmd, rest, last):
@@ -121,12 +142,14 @@ def run(cmd, rest, last):
     best = cmd == "papers" and a and a[-1].lower() == "best"
     if best: a.pop()
     d = " ".join(a) or last
-    if cmd in ("overview", "bio", "trials", "papers", "report") and not d: print(w("give a disease name, e.g. overview hiv")); return last
+    if cmd == "watch": watch(); return last
+    if cmd in ("overview", "bio", "trials", "papers", "report", "leads") and not d: print(w("give a disease name, e.g. overview hiv")); return last
     if cmd == "overview": overview(d)
     elif cmd == "bio": show_bio(d)
     elif cmd == "trials": show_trials(d, 10, s)
     elif cmd == "papers": show_papers(d, 10, not best)
     elif cmd == "report": print("saved:", report(d))
+    elif cmd == "leads": leads(d)
     elif cmd in ("help", "h", "?"): print(HELP); return last
     else: print("unknown command. type help"); return last
     return d
