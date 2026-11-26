@@ -1,6 +1,6 @@
 """sources.py - free, keyless search engines + real compound data. Stdlib only, parallel, cached.
 Europe PMC & OpenAlex (papers) | PubChem (real properties) | ChEMBL (measured IC50) | + PubMed/CT.gov in medscope.py"""
-import json, os, time, hashlib, statistics, urllib.request, urllib.parse
+import json, os, time, hashlib, statistics, urllib.request, urllib.parse, urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
 CF = os.path.join(os.path.expanduser("~"), ".medscope", "cache2.json"); TTL = 12 * 3600
@@ -12,7 +12,15 @@ def J(url, data=None, hdr=None, ttl=TTL):
     except Exception: c = {}
     if k in c and time.time() - c[k][0] < ttl: return c[k][1]
     rq = urllib.request.Request(url, data=data.encode() if data else None, headers={"User-Agent": "MedScope/2.0", **(hdr or {})})
-    with urllib.request.urlopen(rq, timeout=25) as r: j = json.loads(r.read().decode())
+    for a in range(4):   # retry transient server/network errors (5xx, timeouts), never client errors
+        try:
+            with urllib.request.urlopen(rq, timeout=40) as r: j = json.loads(r.read().decode())
+            break
+        except urllib.error.HTTPError as e:
+            if e.code < 500 or a == 3: raise
+        except (TimeoutError, urllib.error.URLError, ConnectionError):
+            if a == 3: raise
+        time.sleep(2 * 2 ** a)
     c[k] = [time.time(), j]
     try: os.makedirs(os.path.dirname(CF), exist_ok=True); json.dump(c, open(CF, "w"))
     except Exception: pass

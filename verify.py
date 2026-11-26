@@ -21,10 +21,10 @@ def env():
     def t(q, lab):
         try: print(lab, json.dumps(humanbio._gql(q, {})["data"])[:300])
         except BaseException as e: print(lab, "FAIL", getattr(e, "read", lambda: b"")()[:400] if hasattr(e, "read") else e)
-    t('{__type(name:"Target"){fields{name}}}', "Target fields:")
-    t('{__type(name:"Expression"){fields{name}}}', "Expression fields:")
-    t('{__type(name:"RNAExpression"){fields{name}}}', "RNAExpression fields:")
-    t('{__type(name:"SafetyLiability"){fields{name}}}', "Safety fields:")
+    try:
+        f = humanbio._gql('{__type(name:"Target"){fields{name type{name kind ofType{name}}}}}', {})["data"]["__type"]["fields"]
+        print("Target expression-like fields:", [(x["name"], x["type"]["name"] or x["type"]["ofType"] and x["type"]["ofType"]["name"]) for x in f if "xpress" in x["name"].lower()])
+    except BaseException as e: print("introspection FAIL", e)
 def sel(): import selftest; selftest.main()
 def val(): import validate, admet; validate.run(False); admet.HAVE and validate.run(True)
 def onb(): import onboard; onboard.onboard("tuberculosis", 2)
