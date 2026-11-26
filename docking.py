@@ -68,13 +68,24 @@ def dock(T, smi, exh=16, seed=7):
     v.compute_vina_maps(center=list(T["center"]), box_size=[T["size"]] * 3); v.dock(exhaustiveness=exh, n_poses=5)
     return float(v.energies(n_poses=1)[0][0]), v.poses(n_poses=1)
 
-def redock_rmsd(T, native=None):
-    """redock the crystal ligand; returns (score, heavy-atom RMSD to crystal pose in A). <=2 A = protocol trustworthy"""
-    native = native or native_smiles(T["lig"]); r = dock(T, native)
-    if not r: return None
-    crystal = AllChem.AssignBondOrdersFromTemplate(Chem.MolFromSmiles(native), Chem.MolFromPDBFile(T["crystal"]))
-    pose = RDKitMolCreate.from_pdbqt_mol(_pq(r[1]))[0]
-    return r[0], rdMolAlign.CalcRMS(Chem.RemoveHs(pose), Chem.RemoveHs(crystal))
+def redock_rmsd(T, native=None, seeds=(3, 5, 7, 11, 13, 17), exh=32, cluster=2.0):
+    """CONSENSUS redocking: dock the crystal ligand from several independent seeds, cluster the top poses (heavy-atom RMSD <= `cluster` A) and take the biggest cluster
+    (ties -> lowest energy). Selection never uses the crystal pose. Returns (score of the chosen pose, RMSD of the chosen pose to the crystal pose in A, cluster size, runs).
+    <= 2 A = protocol trustworthy. (Vina's score alone cannot always rank the native pose first; independent seeds agreeing is the usual remedy.)"""
+    native = native or native_smiles(T["lig"]); crystal = AllChem.AssignBondOrdersFromTemplate(Chem.MolFromSmiles(native), Chem.MolFromPDBFile(T["crystal"])); P = []
+    for sd in seeds:
+        r = dock(T, native, exh=exh, seed=sd)
+        if r:
+            try: P.append((r[0], Chem.RemoveHs(RDKitMolCreate.from_pdbqt_mol(_pq(r[1]))[0])))
+            except Exception: pass
+    if not P: return None
+    groups = []
+    for e, m in P:
+        for g in groups:
+            if rdMolAlign.CalcRMS(m, g[0][1]) <= cluster: g.append((e, m)); break
+        else: groups.append([(e, m)])
+    g = max(groups, key=lambda g: (len(g), -min(e for e, _ in g))); e, m = min(g, key=lambda t: t[0])
+    return e, rdMolAlign.CalcRMS(m, Chem.RemoveHs(crystal)), len(g), len(P)
 
 def _rank(x):
     o = sorted(range(len(x)), key=lambda i: x[i]); r = [0.0] * len(x)

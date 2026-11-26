@@ -56,11 +56,12 @@ class Model:
     def __init__(self, data, fp=_rd_fp, sim=_rd_sim, k=5, domain=.40, seed=3):
         self.fp, self.sim, self.k, self.domain = fp, sim, k, domain
         self.items = [(s, y, f) for s, y in data.items() for f in [fp(s)] if f is not None]; self.n = len(self.items)
-        self.loo = []; self.rmse, self.r2 = self._cv(seed); self.auc = self._auc()
+        self.loo = []; self.loo_c = []; self.rmse, self.r2 = self._cv(seed); self.auc = self._auc(); self.rmse_c = self.auc_c = None; self.rf = None; self.which = 'kNN'; self._cv_cluster(seed); self._rf(seed)
 
-    def _nb(self, f, skip=None, ex=.999):
+    def _nb(self, f, skip=None, ex=.999, cut=None):
         s = sorted(((self.sim(f, g), y, i) for i, (_, y, g) in enumerate(self.items) if i != skip), reverse=True)
         if ex: s = [t for t in s if t[0] < ex]          # drop the molecule itself (and exact duplicates): no leakage
+        if cut: s = [t for t in s if t[0] < cut]        # cluster-aware: also drop the same chemical series
         return s[:self.k]
 
     def _est(self, sims):
@@ -74,6 +75,48 @@ class Model:
             m, _, _ = self._est(self._nb(self.items[i][2], skip=i)); err.append(m - self.items[i][1]); ys.append(self.items[i][1]); self.loo.append((self.items[i][1], m))
         var = statistics.pvariance(ys) or 1e-9; mse = sum(e * e for e in err) / len(err); return math.sqrt(mse), 1 - mse / var
 
+    def _cv_cluster(self, seed, cut=.55, cap=400):
+        """STRICT validation: predict each compound with its whole chemical series (Tanimoto >= cut) removed - tests generalisation to NEW chemotypes, not interpolation inside a series"""
+        if self.n < 20: return
+        idx = random.Random(seed + 1).sample(range(self.n), min(cap, self.n)); err = []
+        for i in idx:
+            nb = self._nb(self.items[i][2], skip=i, cut=cut)
+            if len(nb) < 3: continue
+            m, _, _ = self._est(nb); err.append(m - self.items[i][1]); self.loo_c.append((self.items[i][1], m))
+        if len(err) >= 20: self.rmse_c = math.sqrt(sum(e * e for e in err) / len(err))
+        pos = [p for y, p in self.loo_c if y >= 7]; neg = [p for y, p in self.loo_c if y <= 5]; self.auc_c = roc_auc(pos, neg) if len(pos) >= 3 and len(neg) >= 3 else None
+
+    def _vec(self, smi):
+        from rdkit import Chem
+        from rdkit.Chem import rdFingerprintGenerator
+        m = Chem.MolFromSmiles(smi); return None if m is None else rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=1024).GetCountFingerprintAsNumPy(m).astype(float)
+
+    def _rf(self, seed, cap=4000):
+        """random-forest on Morgan counts, validated with SCAFFOLD-GROUPED 5-fold CV (whole scaffolds held out). Used instead of kNN only if it generalises better to new chemotypes."""
+        try:
+            import numpy as np
+            from sklearn.ensemble import RandomForestRegressor
+            from sklearn.model_selection import GroupKFold, cross_val_predict
+            from rdkit import Chem
+            from rdkit.Chem.Scaffolds import MurckoScaffold
+        except Exception: return
+        if self.n < 60: return
+        rows = [(s, y) for s, y, _ in self.items][:cap]; X, y, g = [], [], []
+        for s, v in rows:
+            x = self._vec(s)
+            if x is None: continue
+            try: sc = MurckoScaffold.MurckoScaffoldSmiles(smiles=s)
+            except Exception: sc = s
+            X.append(x); y.append(v); g.append(hash(sc) % 100003)
+        X, y, g = np.array(X), np.array(y), np.array(g)
+        if len(set(g)) < 6: return
+        rf = RandomForestRegressor(n_estimators=150, min_samples_leaf=1, n_jobs=-1, random_state=seed)
+        pr = cross_val_predict(rf, X, y, groups=g, cv=GroupKFold(5)); rm = float(np.sqrt(np.mean((pr - y) ** 2)))
+        pos = [a for a, b in zip(pr, y) if b >= 7]; neg = [a for a, b in zip(pr, y) if b <= 5]; auc = roc_auc(pos, neg) if len(pos) >= 3 and len(neg) >= 3 else None
+        self.rmse_rf, self.auc_rf = rm, auc
+        if self.rmse_c is None or rm < self.rmse_c:
+            self.rf = rf.fit(X, y); self.which = "random-forest"; self.rmse_c, self.auc_c = rm, auc
+
     def _auc(self):
         pos = [p for y, p in self.loo if y >= 7]; neg = [p for y, p in self.loo if y <= 5]
         return roc_auc(pos, neg) if len(pos) >= 3 and len(neg) >= 3 else None
@@ -85,6 +128,9 @@ class Model:
         sims = self._nb(f, ex=.999 if exclude_self else None)
         if not sims: return None
         m, sd, ms = self._est(sims); base = self.rmse or .8
+        if self.rf is not None:
+            x = self._vec(smi)
+            if x is not None: m = float(self.rf.predict(x.reshape(1, -1))[0]); base = self.rmse_c or base   # strict-CV model chosen: its error bar applies
         sd_tot = max(base, sd) * (1 + 2 * max(0, .6 - ms)); ind = ms >= self.domain
         conf = "HIGH" if ind and ms >= .7 and sd_tot < 1.0 else "MEDIUM" if ind and ms >= .5 else "LOW"
         return {"pic50": m, "sd": sd_tot, "ic50_nM": 10 ** (9 - m), "ic50_lo": 10 ** (9 - m - sd_tot), "ic50_hi": 10 ** (9 - m + sd_tot),
@@ -93,4 +139,5 @@ class Model:
     def summary(self):
         a = f" | ROC AUC {self.auc:.2f} (potent>=7 vs weak<=5; target >0.8)" if self.auc else ""
         r = f"RMSE {self.rmse:.2f} log units (~{10 ** self.rmse:.1f}-fold), R2 {self.r2:.2f}{a}" if self.rmse else "too little data for cross-validation"
-        return f"{self.n} measured compounds | leave-one-out CV: {r}"
+        c = f" | NEW-CHEMOTYPE CV [{self.which}] (series/scaffolds removed): RMSE {self.rmse_c:.2f}" + (f", ROC AUC {self.auc_c:.2f}" if self.auc_c else "") if self.rmse_c else ""
+        return f"{self.n} measured compounds | leave-one-out CV: {r}{c}"

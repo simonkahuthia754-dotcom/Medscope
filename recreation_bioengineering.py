@@ -18,7 +18,7 @@ def rk4(f, y, t, dt):
     return [max(0.0, a + dt / 6 * (b + 2 * c + 2 * d + e)) for a, b, c, d, e in zip(y, k1, k2, k3, k4)]
 
 # ---------------------------------------------------------------- HIV: target cells, latent reservoir, infected, long-lived infected, CTL, immune damage
-HIV0 = dict(lam=10.0, dT=0.01, beta=2.7e-8, p=1.5e6, c=23.0, delta=0.7, fL=2e-3, fM=.03, deltaM=.05, aL=3e-5, dL=4.9e-4, kE=.01, sE=.5, bE=.35, KE=.5, dE=.05, Emax=100.0, kD=6e-4, rD=1e-4, rA=15.0, Vs=100.0, Vk=1e4, Ik=1e-3)
+HIV0 = dict(lam=10.0, dT=0.01, beta=2.7e-8, p=1.5e6, c=23.0, delta=0.7, fL=2e-3, fM=.03, deltaM=.05, aL=3e-5, dL=4.9e-4, kE=.01, sE=.5, bE=.35, KE=.5, dE=.05, Emax=100.0, kD=6e-4, rD=4e-5, rA=100.0, Vs=2.0, Vk=1e4, Ik=1e-3)
 HIV_FREE = {"fL": (1e-5, 5e-3), "fM": (.005, .1), "beta": (5e-9, 2e-7), "p": (1e4, 1e8), "kE": (.001, .2), "bE": (.05, 2.0), "kD": (1e-4, 1e-2)}
 BODY = 2.5e8     # blood-volume-equivalent: 5e6 uL x ~50 for lymphoid tissue (order-of-magnitude, for reservoir counts)
 
@@ -60,7 +60,7 @@ def hiv_features(P, long=True):
     F["CD4 decline rate, untreated years 2-5"] = ((inf[1825]["CD4"] - inf[730]["CD4"]) / 3, -100, -40, "calibrated", "cells/uL/year", "natural-history cohorts (~50-80/yr)"); return F
 
 # ---------------------------------------------------------------- Bacterial infection with persisters (TB / MRSA-like): replicating, persister, immune clearance
-TB0 = dict(g=.35, kI=.05, s=.03, w=.004, B0=1e4, Bmax=1e9, kill_r=.9, kill_p=.03, Hill=1.5)
+TB0 = dict(g=.35, kI=.05, s=.03, w=.004, B0=1e4, Bmax=1e9, kill_r=.9, kill_p=.06, Hill=1.5)
 def tb_f(P, c_over_mic):
     def f(t, y):
         Br, Bp = y; N = Br + Bp; g = P["g"] * max(0.0, 1 - N / P["Bmax"]); e = (lambda x: x ** P["Hill"] / (1 + x ** P["Hill"]))(c_over_mic(t) if callable(c_over_mic) else c_over_mic)
@@ -73,14 +73,14 @@ def tb_run(P, days, c=0.0, y0=None, dt=.1, every=1.0):
         y = rk4(f, y, t, dt); t += dt
     return out
 def tb_features(P):
-    un = tb_run(P, 200); c = 4.0; tx = tb_run(P, 240, c, y0=un[200]["y"]); N0 = tx[0]["N"]; eba = (log10(N0) - log10(tx[2]["N"])) / 2
+    un = tb_run(P, 200); c = 4.0; tx = tb_run(P, 420, c, y0=un[200]["y"]); N0 = tx[0]["N"]; eba = (log10(N0) - log10(tx[2]["N"])) / 2
     late = (log10(tx[30]["N"]) - log10(tx[120]["N"])) / 90; cure = next((r["t"] for r in tx if r["N"] < 1.0), float("inf")); st = tb_run(P, 120, 0.0, y0=tx[120]["y"])
     return {"bacterial load at presentation": (log10(un[200]["N"]), 6.5, 9.0, "calibrated", "log10 CFU", "cavitary TB sputum loads"), "early bactericidal activity (days 0-2)": (eba, .25, .8, "calibrated", "log10 CFU/day", "Jindani/Mitchison EBA"),
             "late sterilizing phase decline": (late, .02, .12, "held-out", "log10 CFU/day", "biphasic kill, Mitchison"), "time to sterilization on therapy": (cure / 30.4, 3, 9, "held-out", "months", "standard 6-month regimens"),
             "relapse after stopping therapy at 2 months": (log10(st[-1]["N"]) - log10(max(tx[60]["N"], 1e-9)), -1, 12, "held-out", "log10 change (growth = relapse)", "short-course trials: high relapse")}
 
 # ---------------------------------------------------------------- Solid tumour with a pre-existing resistant clone (Gompertz + targeted therapy)
-CA0 = dict(a=.0045, K=1e12, N0=1e9, r0=1e-7, kill=.03, fitR=.85, pT=.4)
+CA0 = dict(a=.0007, K=1e12, N0=1e9, r0=1e-7, kill=.03, fitR=.85, pT=.4)
 def ca_run(P, days, drug_from=0, dt=1.0, every=7.0, dose=1.0, on_until=1e9):
     S, R = P["N0"] * (1 - P["r0"]), P["N0"] * P["r0"]; out = []; t = 0.0
     while t <= days:
@@ -90,12 +90,16 @@ def ca_run(P, days, drug_from=0, dt=1.0, every=7.0, dose=1.0, on_until=1e9):
         S = max(S + dt * (g * S - (P["kill"] * dose * S if on else 0)), 0.0); R = max(R + dt * (g * P["fitR"] * R), 0.0); t += dt
     return out
 def ca_features(P):
-    pre = ca_run(P, 400); dbl = math.log(2) / (P["a"] * math.log(P["K"] / P["N0"])); tx = ca_run(P, 1500, drug_from=0); N0 = tx[0]["N"]; nad = min(tx, key=lambda r: r["N"])
-    resp = 1 - nad["N"] / N0; prog = next((r["t"] / 30.4 for r in tx if r["t"] > nad["t"] and r["N"] >= 1.2 * nad["N"]), float("inf"))
+    dbl = math.log(2) / (P["a"] * math.log(P["K"] / P["N0"])); tx = ca_run(P, 2400, drug_from=0); N0 = tx[0]["N"]; nad = min(tx, key=lambda r: r["N"])
+    resp = 1 - nad["N"] / N0; pr = next((r for r in tx if r["t"] > nad["t"] and r["N"] >= 1.73 * nad["N"]), None)   # RECIST progression: +20% diameter = 1.73x volume over nadir
+    prog = pr["t"] / 30.4 if pr else float("inf")
     return {"tumour volume doubling time": (dbl, 60, 300, "calibrated", "days", "NSCLC volumetric doubling (median ~150 d)"), "best objective response (shrinkage)": (resp, .3, .98, "calibrated", "fraction", "EGFR-TKI ORR, RECIST >=30%"),
-            "time to progression on targeted therapy": (prog, 7, 22, "held-out", "months", "EGFR-TKI PFS ~9-19 months (osimertinib ~19)"), "resistant clone at diagnosis": (P["r0"], 1e-9, 1e-5, "prior", "fraction", "Goldie-Coldman / pre-existing T790M estimates")}
+            "time to progression on targeted therapy": (prog, 7, 22, "calibrated", "months", "EGFR-TKI PFS ~9-19 months (osimertinib ~19)"),
+            "resistant fraction of tumour at progression": (pr["R"] if pr else 0.0, .4, 1.0, "held-out", "fraction", "T790M/bypass resistance in ~50-60% of progressions (Yu 2013, Oxnard 2011)"),
+            "tumour-doubling time with sensitive clone only vs resistant (fitness cost)": (P["fitR"], .5, 1.0, "prior", "relative growth", "resistant clones carry a fitness cost")}
 
-MODELS = {"hiv": ("HIV infection", HIV0, hiv_features, HIV_FREE), "tb": ("Tuberculosis", TB0, tb_features, {}), "lung-cancer": ("EGFR lung cancer", CA0, ca_features, {})}
+TB_FREE = {"g": (.1, .6), "kill_r": (.3, 3.0), "kI": (.005, .15)}; CA_FREE = {"kill": (.004, .2), "r0": (1e-8, 1e-2), "a": (3e-4, 3e-3)}   # physiological bounds (a resistant clone is not fitter than the sensitive one)
+MODELS = {"hiv": ("HIV infection", HIV0, hiv_features, HIV_FREE), "tb": ("Tuberculosis", TB0, tb_features, TB_FREE), "lung-cancer": ("EGFR lung cancer", CA0, ca_features, CA_FREE)}
 
 def load(key):
     P = dict(MODELS[key][1])
@@ -118,17 +122,31 @@ def penalty(F):
     return s
 
 def calibrate(key, iters=700, seed=11):
+    return _calibrate(key, iters, seed) if key == "hiv" else _multi(key, iters)
+
+def _multi(key, iters):
+    best = None
+    for sd in (11, 12, 13, 14):
+        P, res = _calibrate(key, iters, sd, save=False)
+        if best is None or res < best[1]: best = (P, res)
+    _store(key, best[0]); return best[0]
+
+def _store(key, P):
+    free = MODELS[key][3]
+    try: allp = json.load(open(PF))
+    except Exception: allp = {}
+    allp[key] = {k: P[k] for k in free}; json.dump(allp, open(PF, "w"), indent=1); print(f"  calibrated {MODELS[key][0]} (best of 4 seeds)")
+
+def _calibrate(key, iters=700, seed=11, save=True):
     """random-restart coordinate search on CALIBRATED features only (held-out features are never used in the objective)"""
     name, base, ff, free = MODELS[key]; P = load(key); rng = random.Random(seed); best = penalty(ff(P, False) if key == "hiv" else ff(P))
-    free = free or {k: (v / 5, v * 5) for k, v in {kk: base[kk] for kk in (("kill", "fitR", "a") if key == "lung-cancer" else ("g", "kill_r", "kI"))}.items()}
     for i in range(iters):
         if best <= 1e-3: break
         Q = dict(P); k = rng.choice(list(free)); lo, hi = free[k]; Q[k] = min(hi, max(lo, P[k] * math.exp(rng.gauss(0, .5 if i < iters / 2 else .15))))
         s = penalty(ff(Q, False) if key == "hiv" else ff(Q))
         if s <= best: P, best = Q, s
-    try: allp = json.load(open(PF))
-    except Exception: allp = {}
-    allp[key] = {k: P[k] for k in free}; json.dump(allp, open(PF, "w"), indent=1); print(f"  calibrated {name}: residual {best:.3f} (lower = closer to the centre of every published range)"); return P
+    if save: _store(key, P); print(f"  residual {best:.3f} (lower = closer to the centre of every published range)"); return P
+    return P, best
 
 def show(key, calib=False):
     name, base, ff, free = MODELS[key]

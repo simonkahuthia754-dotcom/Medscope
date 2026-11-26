@@ -36,7 +36,7 @@ def run(key, top=5, n=60, pop=100, dock_on=True):
     D = diseases.get(key); chemistry.need(); print(f"\n=== {D['key']}: {D['name']} | target: {D['target']} ===")
     if D.get("note"): print("NOTE:", D["note"])
     cid, nm = diseases.resolve_chembl(D); print(f"ChEMBL target {cid} = {nm}   <- check this is the protein you mean")
-    ov = lab.training_overlay(D["key"]); data = potency.fetch(cid, overlay=ov); model = potency.Model(data); print("QSAR:", model.summary()); __import__("state").record("qsar_auc", model.auc) if model.auc else None; __import__("state").record("qsar_rmse", model.rmse) if model.rmse else None
+    ov = lab.training_overlay(D["key"]); data = potency.fetch(cid, overlay=ov); model = potency.Model(data); print("QSAR:", model.summary()); (__import__("state").record("qsar_auc_cluster", round(model.auc_c, 3)) if model.auc_c else None); (__import__("state").record("qsar_rmse_cluster", round(model.rmse_c, 3)) if model.rmse_c else None); __import__("state").record("qsar_auc", model.auc) if model.auc else None; __import__("state").record("qsar_rmse", model.rmse) if model.rmse else None
     if ov: print(f"  includes {len(ov)} measurements from YOUR lab")
     if model.n < 30: print("Too little measured data for this target: potency cannot be predicted reliably. Measure leads in a lab (lab.py) or use docking only."); return []
     diseases.check(D["key"], model=model)

@@ -19,8 +19,8 @@ def c_ingred():
     v = (3 if S("rxnorm_ok") else 0) + (3 if S("ddi_ok") else 0)
     return v, 6, f"RxNorm ingredients {'ok' if S('rxnorm_ok') else 'untested'}; combination/DDI checks {'ok (ADMET-AI)' if S('ddi_ok') else 'untested'}; excipients & synergy not modelled"
 def c_potency():
-    a = S("qsar_auc"); v = 7 * fr(a, .8) if a else 0
-    return v, 7, f"QSAR ROC AUC {a:.2f} (target >=0.80), RMSE {S('qsar_rmse', 0):.2f} log units" if a else "QSAR not yet run on real ChEMBL data  -> run: discover <disease>"
+    a, ac = S("qsar_auc"), S("qsar_auc_cluster"); u = ac if ac is not None else a; v = 7 * fr(u, .8) if u else 0
+    return v, 7, (f"QSAR ROC AUC {a:.2f} within-series, {ac if ac is not None else 'n/a'} on NEW chemotypes (the stricter number is scored; target >=0.80), RMSE-new {S('qsar_rmse_cluster', 'n/a')} log units" if a else "QSAR not yet run on real ChEMBL data  -> run: discover <disease>")
 def c_pk():
     b = max(S("pk_test_rule", 0), S("pk_test_admet", 0)); v = 8 * fr(b, 70)
     return v, 8, f"BLIND-test half-lives within 2-fold: {b}% (target >=70%); rule-based {S('pk_test_rule', 'n/a')}%, ADMET-AI-resolved {S('pk_test_admet', 'not run')}% (tuning set: {S('pk_dev_rule', 'n/a')}%)"

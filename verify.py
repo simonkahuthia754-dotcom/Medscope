@@ -21,6 +21,8 @@ def env():
     def t(q, lab):
         try: print(lab, json.dumps(humanbio._gql(q, {})["data"])[:300])
         except BaseException as e: print(lab, "FAIL", getattr(e, "read", lambda: b"")()[:400] if hasattr(e, "read") else e)
+    try: lv, ev = humanbio.target_expression("EGFR"); print("expression EGFR:", lv, "| safety events:", ev[:5])
+    except BaseException as e: print("EXPRESSION FAIL", type(e).__name__, e)
     try:
         f = humanbio._gql('{__type(name:"Target"){fields{name type{name kind ofType{name}}}}}', {})["data"]["__type"]["fields"]
         print("Target expression-like fields:", [(x["name"], x["type"]["name"] or x["type"]["ofType"] and x["type"]["ofType"]["name"]) for x in f if "xpress" in x["name"].lower()])
@@ -30,7 +32,7 @@ def dck():
     D = diseases.get("lung-cancer"); print("pdb", D.get("pdb"), "chembl", D.get("chembl"))
     try:
         T = docking.prepare(D["pdb"]); print("prepared", T["lig"], T["center"], T["size"])
-        r = docking.redock_rmsd(T); print("redock", r)
+        r = docking.redock_rmsd(T); print("redock (score, RMSD A, cluster size, runs):", r)
         if r: state.record("redock_rmsd", round(r[1], 2))
         data = potency.fetch(D["chembl"]); cal = docking.calibrate(T, data); print("calibration", {k: v for k, v in cal.items() if k != "pts"}); 
         if cal.get("rho") is not None: state.record("dock_rho", round(cal["rho"], 2))

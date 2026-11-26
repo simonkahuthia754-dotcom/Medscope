@@ -76,20 +76,29 @@ def safety_score(prof, high_pct, margin=None):
 def stabilize(smi, ic50_nM=None, model=None, n=40, ancestry="african", show=True, ad_fn=None, popn=3000):
     import admet, potency
     smi = potency.standardize(smi); ad_fn = ad_fn or (lambda xs: admet.predict(xs))
-    cand = analogs(smi, n); allsmi = [smi] + [s for s, _ in cand]; ad = ad_fn(allsmi); base = profile(smi, ad[smi], ic50_nM, model); sims = dict(cand)
-    rows = []
-    for s in allsmi[1:]:
-        try: pr = profile(s, ad[s], ic50_nM, model)
-        except Exception: continue
-        if model is not None and base["pic50"] is not None and pr["pic50"] is not None and pr["pic50"] < base["pic50"] - .5: continue   # keep potency
-        pr["sim"] = sims[s]; rows.append(pr)
-    rows.sort(key=lambda r: (r["tox"] if r["tox"] is not None else 1, -len(r["alerts"]) * 0, -(r["pic50"] or 0)))
+    base_ad = ad_fn([smi]); base = profile(smi, base_ad[smi], ic50_nM, model); seen = {smi: base}; rows = []; tested = 0
+    def score(r): return (r["tox"] if r["tox"] is not None else 1) + .03 * len(r["alerts"]) - .02 * (r["pic50"] or 0)
+    def expand(parent, k):
+        nonlocal tested
+        cand = analogs(parent, k, sim_min=.55 if parent != smi else .6); new = [(s_, sm) for s_, sm in cand if s_ not in seen]
+        if not new: return
+        ad = ad_fn([s_ for s_, _ in new]); tested += len(new)
+        for s_, sm in new:
+            try: pr = profile(s_, ad[s_], ic50_nM, model)
+            except Exception: seen[s_] = None; continue
+            seen[s_] = pr
+            if model is not None and base["pic50"] is not None and pr["pic50"] is not None and pr["pic50"] < base["pic50"] - .5: continue   # keep potency
+            from rdkit import DataStructs
+            import chemistry; pr["sim"] = DataStructs.TanimotoSimilarity(chemistry.fp(chemistry.mol(smi)), chemistry.fp(chemistry.mol(s_))); rows.append(pr)
+    expand(smi, n)                                         # generation 1
+    for r in sorted(rows, key=score)[:5]: expand(r["smiles"], max(10, n // 2))   # generation 2: edit the five best again (greedy multi-step optimisation)
+    rows.sort(key=score); res = {"base": base, "best": None, "analogs_tested": tested, "kept": len(rows)}
     best = rows[0] if rows and rows[0]["tox"] is not None and base["tox"] is not None and rows[0]["tox"] < base["tox"] else None
-    ic = ic50_nM or 10.0; res = {"base": base, "best": best, "analogs_tested": len(allsmi) - 1, "kept": len(rows)}
-    hb, lb = pop_high(base, ic, ancestry, popn); sb, pb = safety_score(base, hb); res.update(pop_before=(hb, lb), score_before=sb, parts_before=pb)
-    tgt = best or base; ha, la = pop_high(tgt, ic, ancestry, popn) if best else (hb, lb); reg = regimen(tgt["p"], tgt["ovr"], ic, tgt["p"]["mw"])
-    marg = None
-    if reg: marg = max(0.0, min(1.0, 1 - min(r["peak_free_x_ic50"] for r in reg) / 50))   # lower peak free conc relative to IC50 = wider margin (proxy)
+    ic = ic50_nM or 10.0; res["best"] = best
+    def margin(pr):
+        rg = regimen(pr["p"], pr["ovr"], ic, pr["p"]["mw"]); return rg, (max(0.0, min(1.0, 1 - min(r["peak_free_x_ic50"] for r in rg) / 50)) if rg else None)   # lower peak free conc relative to IC50 = wider margin (proxy)
+    _, mb = margin(base); hb, lb = pop_high(base, ic, ancestry, popn); sb, pb = safety_score(base, hb, mb); res.update(pop_before=(hb, lb), score_before=sb, parts_before=pb)
+    tgt = best or base; ha, la = pop_high(tgt, ic, ancestry, popn) if best else (hb, lb); reg, marg = margin(tgt)
     sa, pa = safety_score(tgt, ha, marg); res.update(pop_after=(ha, la), score_after=sa, parts_after=pa, regimen=reg)
     red = (base["tox"] - best["tox"]) / base["tox"] if best and base["tox"] else 0.0; res["tox_reduction"] = red
     state.record("stab_ok", True); state.record("stab_reduction", round(red, 2)); state.record("stab_score", round(sa))
