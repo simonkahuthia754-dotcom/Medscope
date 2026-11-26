@@ -16,7 +16,7 @@ ENDP = {"heart": ("hERG", "hERG/QT"), "liver": ("DILI", "drug-induced liver inju
 ORGAN_EXP = {"heart": "heart", "liver": "liver", "skin": "skin", "genome": None, "systemic": None, "carcinogenic": None}
 
 def risks(ad, exp=None):
-    """ADMET probabilities (+ organ exposure ratios from PBPK) -> per-organ risk and an overall toxicity index = 1 - prod(1 - risk)"""
+    """ADMET probabilities (+ organ exposure ratios from PBPK) -> per-organ risk and an overall toxicity index = severity-weighted mean of risks"""
     import admet
     out = {}
     for k, (key, label) in ENDP.items():
@@ -24,7 +24,8 @@ def risks(ad, exp=None):
         if p is None: continue
         o = ORGAN_EXP[k]; w = 1.0 if not (exp and o and o in exp) else .5 + .5 * min(1.0, exp[o][1])   # a liability only matters where the drug actually goes
         out[k] = dict(p=p, risk=p * w, label=label)
-    idx = 1 - math.prod(1 - v["risk"] for v in out.values()) if out else None; return out, idx
+    W = dict(liver=.25, heart=.25, genome=.2, systemic=.15, carcinogenic=.1, skin=.05)   # severity weights; weighted MEAN (a product saturates at 1.0 and hides improvements)
+    idx = sum(W[k] * v["risk"] for k, v in out.items()) / sum(W[k] for k in out) if out else None; return out, idx
 
 def regimen(p, ovr, ic50_nM, mw, fup=None, cover=1.0):
     """equal free trough (= efficacy) at tau = 24/12/8/6 h: dose, daily dose, peak-to-trough, peak free conc vs IC50"""
@@ -66,7 +67,7 @@ def profile(smi, ad, ic50_nM=None, model=None):
 
 def pop_high(prof, ic50, ancestry="african", n=3000):
     import mass_population as mp
-    r = mp.run(prof["p"], prof["ovr"], {}, prof["p"]["mw"], 100.0, ic50, 24.0, n, ancestry, show=False); return r["overall"]["high"], r["overall"]["low"]
+    r = mp.run(prof["p"], prof["ovr"], {}, prof["p"]["mw"], 100.0, ic50, 24.0, n, ancestry, show=False, record=False); return r["overall"]["high"], r["overall"]["low"]
 
 def safety_score(prof, high_pct, margin=None):
     t = 1 - (prof["tox"] if prof["tox"] is not None else .5); parts = dict(organ=40 * t, population=30 * (1 - high_pct / 100), margin=15 * (margin if margin is not None else .5), alerts=15 * (0 if prof["alerts"] else 1))

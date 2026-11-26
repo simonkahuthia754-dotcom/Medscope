@@ -121,7 +121,7 @@ def groups(s):
     g += ["CYP3A5 " + s["geno"]["CYP3A5"], "NAT2 " + s["geno"]["NAT2"], "UGT1A1 " + s["geno"]["UGT1A1"]] + ["condition: " + c for c in s["cond"]]
     return g or ["all"]
 
-def run(p, ovr=None, fm=None, mw=300.0, dose=100.0, ic50_nM=None, tau=24.0, n=10000, ancestry="african", disease=None, peds=False, food=None, rifampicin=False, tox_auc=3.0, tox_cmax=2.5, show=True):
+def run(p, ovr=None, fm=None, mw=300.0, dose=100.0, ic50_nM=None, tau=24.0, n=10000, ancestry="african", disease=None, peds=False, food=None, rifampicin=False, tox_auc=3.0, tox_cmax=2.5, show=True, record=True):
     subs = adjust_food(make(n, 1, ancestry, disease, peds, food, rifampicin, fm), p); b_a, b_c, R2, ref = surrogate(p, subs, ovr)
     fup0 = ref["params"]["fup"]; css = pbpk.steady_state(ref, tau); tr = min(css) / (sum(css) / len(css)); aref, cref = ref["auc"] * dose / 100, ref["cmax"] * dose / 100
     for s in subs:
@@ -137,8 +137,9 @@ def run(p, ovr=None, fm=None, mw=300.0, dose=100.0, ic50_nM=None, tau=24.0, n=10
         if len(L) >= max(30, n // 200):
             adj = max(.25, min(2.0, aref / med(L, "auc"))); res["groups"][g] = dict(n=len(L), auc_ratio=med(L, "auc") / aref, high=pct(L, "high"), low=pct(L, "low") if ic50_nM else None, dose_adj=adj)
     if show: report(res, dose, ic50_nM, aref, ancestry)
-    state.record("pop_n", n)
-    if R2 is not None: state.record("pop_r2", round(R2, 3))
+    if record:
+        state.record("pop_n", n)
+        if R2 is not None: state.record("pop_r2", round(R2, 3))
     return res
 
 def report(res, dose, ic50, aref, anc):
