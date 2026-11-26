@@ -46,7 +46,7 @@ def native_smiles(code):
     """SMILES of a PDB ligand code from RCSB (template for bond orders in the redocking check)"""
     import sources
     r = sources.J(f"https://data.rcsb.org/rest/v1/core/chemcomp/{code}").get("rcsb_chem_comp_descriptor", {})
-    return r.get("smilesstereo") or r.get("smiles")
+    L = {k.lower().replace("_", ""): v for k, v in r.items()}; return L.get("smilesstereo") or L.get("smiles")
 
 def _lig(smi, seed=7):
     m = Chem.AddHs(Chem.MolFromSmiles(smi))
