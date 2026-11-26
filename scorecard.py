@@ -41,9 +41,22 @@ def c_reliab():
 def c_honest():
     ok = os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "README.md")); return (8 if ok else 4), 8, "confidence labels, error bars, trust gates, no cure claims; no external audit (cap 8)"
 
+def c_recreate():
+    ks = [S(f"recreate_{k}") for k in ("hiv", "tb", "lung-cancer")]; ks = [k for k in ks if k]
+    if not ks: return 0, 5, "no disease recreated yet -> run: recreate all"
+    ca, cn, ha, hn = (sum(k[i] for k in ks) for i in range(4)); v = 2 * ca / max(1, cn) + 3 * ha / max(1, hn)
+    return v, 5, f"{len(ks)} mechanistic disease models vs published data: calibrated {ca}/{cn}, HELD-OUT {ha}/{hn} (the 98% target applies to held-out; fitted features prove little)"
+def c_stab():
+    if not S("stab_ok"): return 0, 4, "stabilizer not yet run -> run: stabilize <drug>"
+    r = S("stab_reduction", 0); sc = S("stab_score", 0); v = 1.5 + 1.5 * min(1, r / .3) + 1.0 * min(1, sc / 80)
+    return v, 4, f"toxicity index cut {100 * r:.0f}% by structure edits (target >=30%); safety score {sc}/100 (target >=80); predictions only, no animal/clinical safety data"
+def c_pop():
+    v = (3 if S("pop_ok") else 0) + (1 if (S("pop_r2") or 0) >= .95 else 0) + (1 if (S("pop_n") or 0) >= 10000 else 0)
+    return v, 5, f"mass-population checks {'pass' if S('pop_ok') else 'not run'}; n={S('pop_n', 0)}, surrogate R2 {S('pop_r2', 'n/a')}; ancestry genes, liver/kidney/heart disease, food, age, weight, sex"
+
 CR = [("Disease coverage: any disease + new targets", c_disease), ("Drug coverage: every approved drug + new molecules", c_drugs), ("Ingredients & combinations", c_ingred),
       ("Potency prediction (measured-data QSAR)", c_potency), ("ADMET / PK accuracy (validated)", c_pk), ("Structure docking (trust-gated)", c_dock),
-      ("Human biology realism", c_human), ("Lab feedback loop (prospective accuracy)", c_lab), ("Reliability & device support", c_reliab), ("Safety & honesty", c_honest)]
+      ("Human biology realism", c_human), ("Lab feedback loop (prospective accuracy)", c_lab), ("Reliability & device support", c_reliab), ("Safety & honesty", c_honest), ("Disease recreation (validated mechanism)", c_recreate), ("Toxicity stabilization", c_stab), ("Mass-population human simulation", c_pop)]
 
 def main(refresh=True):
     if refresh:

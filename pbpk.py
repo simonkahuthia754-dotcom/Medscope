@@ -46,11 +46,13 @@ def kp(t, P, fup, plasma=None):
 
 def build(p, species, ovr=None, subj=None):
     s = SPECIES[species]; sj = subj or {}; bw = sj.get("bw", s["bw"]); d, src = predict(p, ovr); d = dict(d)
-    d["fup"] = clamp(d["fup"] * sj.get("fup_scale", 1), .003, 1); P = 10 ** clamp(p["logp"], -3, 6)
+    d["fup"] = clamp(d["fup"] * sj.get("fup_scale", 1), .003, 1); d["fa"] = clamp(d["fa"] * sj.get("fa_scale", 1), .03, 1); d["ka"] = d["ka"] * sj.get("ka_scale", 1); P = 10 ** clamp(p["logp"], -3, 6)
     CO = s["qc"] * bw ** .75 * sj.get("qc_scale", 1); V = {k: v * bw for k, v in s["V"].items()}
     V["art"], V["ven"] = V["blood"] / 3, V["blood"] * 2 / 3; V["lumen"] = 1.0
     V["rest"] = bw - sum(V[k] for k in ("gut", "liver", "kidney", "heart", "brain", "lung", "muscle", "fat", "skin", "blood"))
-    Q = {k: v * CO for k, v in s["Q"].items()}; Q["rest"] = CO - sum(Q.values())
+    Q = {k: v * CO for k, v in s["Q"].items()}
+    for k in ("liver_art", "gut"): Q[k] *= sj.get("hepq_scale", 1)   # splanchnic/hepatic flow (cirrhosis, heart failure)
+    Q["rest"] = CO - sum(Q.values())
     K = {t: kp(t, P, d["fup"]) for t in TIS + ["lung"]}
     if d.get("vss"):   # calibrate tissue partitioning so the model's Vss matches the supplied (measured / ADMET) Vss
         vt = sum(V[t] * K[t] for t in K); f = clamp((d["vss"] * bw - V["blood"]) / vt, .1, 10); K = {t: k * f for t, k in K.items()}

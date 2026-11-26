@@ -35,6 +35,9 @@ def dck():
         data = potency.fetch(D["chembl"]); cal = docking.calibrate(T, data); print("calibration", {k: v for k, v in cal.items() if k != "pts"}); 
         if cal.get("rho") is not None: state.record("dock_rho", round(cal["rho"], 2))
     except BaseException: print(traceback.format_exc()[-1800:]); raise
+def popn(): import mass_population as m; assert m.selftest(); m.cli(["metformin", "--n", "10000", "--ic50", "1000"])
+def rec(): import recreation_bioengineering as r; r.cli(["all"])
+def stab(): import stabilizer; stabilizer.cli(["erlotinib", "--ic50", "20", "--target", "lung-cancer", "--n", "40"])
 def sel(): import selftest; selftest.main()
 def val(): import validate, admet; validate.run(False); admet.HAVE and validate.run(True)
 def onb(): import onboard; onboard.onboard("tuberculosis", 2)
@@ -45,7 +48,7 @@ def dsc(): import discover; discover.run("lung-cancer", 5, 30, 50, True)
 def rep(): import library; library.repurpose("blood-cancer", 10)
 def mech(): import reverse_bioengineering as rb; rb.analyze("HIV infection", key="hiv")
 def disc_chk(): import diseases; diseases.check("lung-cancer")
-for n, f in [("env", env), ("selftest", sel), ("validate", val), ("onboard", onb), ("library", lib), ("drug", drg), ("combo", cmb), ("docking", dck), ("discover", dsc), ("repurpose", rep), ("mechanism", mech), ("check", disc_chk)]: step(n, f)
+for n, f in [("env", env), ("selftest", sel), ("validate", val), ("onboard", onb), ("library", lib), ("drug", drg), ("combo", cmb), ("population", popn), ("recreate", rec), ("stabilize", stab), ("docking", dck), ("discover", dsc), ("repurpose", rep), ("mechanism", mech), ("check", disc_chk)]: step(n, f)
 import scorecard; buf = io.StringIO()
 with contextlib.redirect_stdout(buf): scorecard.main(refresh=False)
 print(buf.getvalue()); open("medscope_out/scorecard.txt", "w").write(buf.getvalue()); json.dump(R, open("medscope_out/verify.json", "w"), indent=1)

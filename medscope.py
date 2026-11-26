@@ -149,6 +149,13 @@ HELP = """MedScope commands (or run: python medscope.py <cmd> <disease>)
   help | quit   (menu mode remembers your last disease: just type a command alone)"""
 
 def run(cmd, rest, last):
+    if cmd in ("recreate", "stabilize", "population", "person"):
+        try:
+            if cmd == "recreate": import recreation_bioengineering as x; x.cli(rest.split())
+            elif cmd == "stabilize": import stabilizer as x; x.cli(rest.split())
+            else: import mass_population as x; x.cli((["person"] if cmd == "person" else []) + rest.split())
+        except Exception as e: print(w(f"! {e}"))
+        return last
     if cmd in ("mechanism", "how"):
         import reverse_bioengineering as rb
         try: rb.analyze(rest.replace("--save","").strip(), save="--save" in rest) if rest.replace("--save","").strip() else print("usage: mechanism <disease> [--save]")
