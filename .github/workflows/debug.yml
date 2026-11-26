@@ -11,7 +11,7 @@ jobs:
         shell: bash -el {0}
         run: |
           conda install -y rdkit vina openbabel || true
-          pip install gemmi meeko || true
+          pip install gemmi meeko admet-ai scikit-learn || true
       - name: debug
         shell: bash -el {0}
         run: python ci_debug.py
