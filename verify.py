@@ -25,6 +25,16 @@ def env():
         f = humanbio._gql('{__type(name:"Target"){fields{name type{name kind ofType{name}}}}}', {})["data"]["__type"]["fields"]
         print("Target expression-like fields:", [(x["name"], x["type"]["name"] or x["type"]["ofType"] and x["type"]["ofType"]["name"]) for x in f if "xpress" in x["name"].lower()])
     except BaseException as e: print("introspection FAIL", e)
+def dck():
+    import diseases, docking, potency, state, traceback
+    D = diseases.get("lung-cancer"); print("pdb", D.get("pdb"), "chembl", D.get("chembl"))
+    try:
+        T = docking.prepare(D["pdb"]); print("prepared", T["lig"], T["center"], T["size"])
+        r = docking.redock_rmsd(T); print("redock", r)
+        if r: state.record("redock_rmsd", round(r[1], 2))
+        data = potency.fetch(D["chembl"]); cal = docking.calibrate(T, data); print("calibration", {k: v for k, v in cal.items() if k != "pts"}); 
+        if cal.get("rho") is not None: state.record("dock_rho", round(cal["rho"], 2))
+    except BaseException: print(traceback.format_exc()[-1800:]); raise
 def sel(): import selftest; selftest.main()
 def val(): import validate, admet; validate.run(False); admet.HAVE and validate.run(True)
 def onb(): import onboard; onboard.onboard("tuberculosis", 2)
@@ -35,7 +45,7 @@ def dsc(): import discover; discover.run("lung-cancer", 5, 30, 50, True)
 def rep(): import library; library.repurpose("blood-cancer", 10)
 def mech(): import reverse_bioengineering as rb; rb.analyze("HIV infection", key="hiv")
 def disc_chk(): import diseases; diseases.check("lung-cancer")
-for n, f in [("env", env), ("selftest", sel), ("validate", val), ("onboard", onb), ("library", lib), ("drug", drg), ("combo", cmb), ("discover", dsc), ("repurpose", rep), ("mechanism", mech), ("check", disc_chk)]: step(n, f)
+for n, f in [("env", env), ("selftest", sel), ("validate", val), ("onboard", onb), ("library", lib), ("drug", drg), ("combo", cmb), ("docking", dck), ("discover", dsc), ("repurpose", rep), ("mechanism", mech), ("check", disc_chk)]: step(n, f)
 import scorecard; buf = io.StringIO()
 with contextlib.redirect_stdout(buf): scorecard.main(refresh=False)
 print(buf.getvalue()); open("medscope_out/scorecard.txt", "w").write(buf.getvalue()); json.dump(R, open("medscope_out/verify.json", "w"), indent=1)
