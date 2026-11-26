@@ -17,7 +17,14 @@ def env():
         except BaseException as e: print("IMPORT FAIL", m, type(e).__name__, e)
     try: from meeko import MoleculePreparation, PDBQTWriterLegacy, PDBQTMolecule, RDKitMolCreate; print("meeko names ok")
     except BaseException as e: print("MEEKO NAMES FAIL", e)
-    import humanbio; print("expression CCR5:", humanbio.target_expression("CCR5"))
+    import humanbio, json
+    def t(q, lab):
+        try: print(lab, json.dumps(humanbio._gql(q, {})["data"])[:300])
+        except BaseException as e: print(lab, "FAIL", getattr(e, "read", lambda: b"")()[:400] if hasattr(e, "read") else e)
+    t('{__type(name:"Target"){fields{name}}}', "Target fields:")
+    t('{__type(name:"Expression"){fields{name}}}', "Expression fields:")
+    t('{__type(name:"RNAExpression"){fields{name}}}', "RNAExpression fields:")
+    t('{__type(name:"SafetyLiability"){fields{name}}}', "Safety fields:")
 def sel(): import selftest; selftest.main()
 def val(): import validate, admet; validate.run(False); admet.HAVE and validate.run(True)
 def onb(): import onboard; onboard.onboard("tuberculosis", 2)
