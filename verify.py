@@ -10,7 +10,7 @@ def step(name, f):
         R[name] = {"ok": True, "s": round(time.time() - t)}
     except BaseException as e:
         R[name] = {"ok": False, "err": f"{type(e).__name__}: {e}", "tb": traceback.format_exc()[-900:]}
-    out = buf.getvalue(); open(f"medscope_out/{name}.log", "w").write(out); print(f"[{'OK ' if R[name]['ok'] else 'FAIL'}] {name}" + ("" if R[name]["ok"] else "  " + R[name]["err"]), flush=True)
+    out = buf.getvalue(); open(f"medscope_out/{name}.log", "w").write(out); print("\n".join("    | "+l[:200] for l in out.splitlines() if l.strip() and "it/s" not in l and "GPU" not in l and "TPU" not in l and "Tip:" not in l and "Warning" not in l)[-3500:], flush=True); print(f"[{'OK ' if R[name]['ok'] else 'FAIL'}] {name}" + ("" if R[name]["ok"] else "  " + R[name]["err"]), flush=True)
 def sel(): import selftest; selftest.main()
 def val(): import validate, admet; validate.run(False); admet.HAVE and validate.run(True)
 def onb(): import onboard; onboard.onboard("tuberculosis", 2)
