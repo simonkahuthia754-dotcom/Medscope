@@ -11,6 +11,8 @@ import json, math, sys
 import humanbio, sources, state
 
 GEN = ("genetic_association", "somatic_mutation")         # causal-leaning evidence types in Open Targets
+import re
+ADME = re.compile(r"^(CYP\d|ABC[A-G]\d|SLC\d|UGT\d|SULT|GST[A-Z]\d|NAT\d)")
 VITAL = ("heart", "brain", "liver", "kidney", "lung")
 
 # textbook-level knowledge (verify against current literature): lifecycle / formation and why elimination is hard
@@ -89,13 +91,13 @@ def betweenness(adj):
 def window(symbol):
     """therapeutic window: vital organs where the human target is also strongly expressed (= where on-target toxicity could occur)"""
     try: lv, _ = humanbio.target_expression(symbol)
-    except Exception: return None, []
+    except Exception as e: print(f"   (expression lookup failed for {symbol}: {type(e).__name__}: {e})"); return None, []
     bad = sorted(o for o in VITAL if lv.get(o, 0) >= 3); return 1 - len(bad) / len(VITAL), bad
 
 def shortlist(rows, deg, bet, top=8):
     """transparent ranking: genetics .30 + overall association .20 + tractability .15 + network chokepoint .10 + selectivity window .15 + existing-drug evidence .10"""
     out = []
-    for r in rows[:15]:
+    for r in [r for r in rows if not ADME.match(r["symbol"])][:15]:   # drug-metabolism genes (CYP/ABC/SLC/UGT) are associated via pharmacology, not disease formation
         sel, bad = window(r["symbol"]); mx = max(deg.values() or [1]) or 1
         s = (.30 * r["genetic"] + .20 * r["assoc"] + .15 * (1 if "SM" in r["mods"] else .6 if r["mods"] else 0) + .10 * (bet.get(r["symbol"], 0) * .5 + deg.get(r["symbol"], 0) / mx * .5)
              + .15 * (sel if sel is not None else .5) + .10 * r["drugs"])

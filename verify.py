@@ -11,6 +11,13 @@ def step(name, f):
     except BaseException as e:
         R[name] = {"ok": False, "err": f"{type(e).__name__}: {e}", "tb": traceback.format_exc()[-900:]}
     out = buf.getvalue(); open(f"medscope_out/{name}.log", "w").write(out); print("\n".join("    | "+l[:200] for l in out.splitlines() if l.strip() and "it/s" not in l and "GPU" not in l and "TPU" not in l and "Tip:" not in l and "Warning" not in l)[-3500:], flush=True); print(f"[{'OK ' if R[name]['ok'] else 'FAIL'}] {name}" + ("" if R[name]["ok"] else "  " + R[name]["err"]), flush=True)
+def env():
+    for m in ("vina", "meeko", "rdkit", "admet_ai"):
+        try: __import__(m); print("import ok", m)
+        except BaseException as e: print("IMPORT FAIL", m, type(e).__name__, e)
+    try: from meeko import MoleculePreparation, PDBQTWriterLegacy, PDBQTMolecule, RDKitMolCreate; print("meeko names ok")
+    except BaseException as e: print("MEEKO NAMES FAIL", e)
+    import humanbio; print("expression CCR5:", humanbio.target_expression("CCR5"))
 def sel(): import selftest; selftest.main()
 def val(): import validate, admet; validate.run(False); admet.HAVE and validate.run(True)
 def onb(): import onboard; onboard.onboard("tuberculosis", 2)
@@ -21,7 +28,7 @@ def dsc(): import discover; discover.run("lung-cancer", 5, 30, 50, True)
 def rep(): import library; library.repurpose("blood-cancer", 10)
 def mech(): import reverse_bioengineering as rb; rb.analyze("HIV infection", key="hiv")
 def disc_chk(): import diseases; diseases.check("lung-cancer")
-for n, f in [("selftest", sel), ("validate", val), ("onboard", onb), ("library", lib), ("drug", drg), ("combo", cmb), ("discover", dsc), ("repurpose", rep), ("mechanism", mech), ("check", disc_chk)]: step(n, f)
+for n, f in [("env", env), ("selftest", sel), ("validate", val), ("onboard", onb), ("library", lib), ("drug", drg), ("combo", cmb), ("discover", dsc), ("repurpose", rep), ("mechanism", mech), ("check", disc_chk)]: step(n, f)
 import scorecard; buf = io.StringIO()
 with contextlib.redirect_stdout(buf): scorecard.main(refresh=False)
 print(buf.getvalue()); open("medscope_out/scorecard.txt", "w").write(buf.getvalue()); json.dump(R, open("medscope_out/verify.json", "w"), indent=1)

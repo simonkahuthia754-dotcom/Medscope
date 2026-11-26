@@ -16,14 +16,21 @@ def ingredients(product):
         r = sources.J(f"{RX}/rxcui.json?name={sources.Q(product)}&search=2")["idGroup"].get("rxnormId") or []
         if not r: return [product]
         names = []
-        for g in sources.J(f"{RX}/rxcui/{r[0]}/related.json?tty=IN+MIN+PIN")["relatedGroup"].get("conceptGroup", []):
-            names += [c["name"] for c in g.get("conceptProperties", [])]
+        for g in sources.J(f"{RX}/rxcui/{r[0]}/related.json?tty=IN")["relatedGroup"].get("conceptGroup", []):
+            names += [c["name"] for c in g.get("conceptProperties", []) if " / " not in c["name"]]
         state.record("rxnorm_ok", True); return sorted(set(n.lower() for n in names)) or [product]
     except Exception: return [product]
 
 def profile(name, dose_mg=100.0):
     """structure + properties + human PBPK + ADMET flags for ONE ingredient"""
     pc = sources.pubchem(name); state.record("pubchem_ok", True); p = {"logp": pc["logp"], "mw": pc["mw"], "tpsa": pc.get("tpsa") or 80}
+    try:  # parent molecule only: strip salts/counter-ions, recompute descriptors from the parent structure
+        import potency
+        from rdkit import Chem
+        from rdkit.Chem import Descriptors, Crippen, rdMolDescriptors
+        ps = potency.standardize(pc["smiles"]); m = Chem.MolFromSmiles(ps)
+        if m: pc = dict(pc, smiles=ps); p = {"logp": Crippen.MolLogP(m), "mw": Descriptors.MolWt(m), "tpsa": rdMolDescriptors.CalcTPSA(m)}
+    except Exception: pass
     out = {"name": name, "smiles": pc["smiles"], "props": p, "flags": [], "cyp_sub": [], "ovr": None, "admet": {}}
     try:
         import admet
