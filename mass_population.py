@@ -166,7 +166,7 @@ def drug(arg, dose=100.0):
     if any(c in arg for c in "()=#[]") and not arg.isalpha():
         from rdkit import Chem
         from rdkit.Chem import Descriptors, Crippen, rdMolDescriptors
-        m = Chem.MolFromSmiles(arg); p = dict(logp=Crippen.MolLogP(m), mw=Descriptors.MolWt(m), tpsa=rdMolDescriptors.CalcTPSA(m)); ovr = a = None
+        m = Chem.MolFromSmiles(arg); p = dict(logp=Crippen.MolLogP(m), mw=Descriptors.MolWt(m), tpsa=rdMolDescriptors.CalcTPSA(m), ion=pbpk.ion_class(arg)); ovr = a = None
         try:
             import admet
             if admet.HAVE: a = admet.predict([arg])[arg]; ovr = admet.overrides(a)

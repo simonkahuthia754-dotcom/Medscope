@@ -29,8 +29,9 @@ def predict(p, ovr=None):
     o = ovr or {}; lp, mw, tp = p["logp"], p["mw"], p.get("tpsa", 80)
     fa = 1.0 if tp <= 100 and mw <= 500 else clamp(1 - max(tp - 100, 0) / 120 - (.3 if mw > 600 else 0), .05, 1)
     if lp < -1: fa *= .6
-    d = {"fup": clamp(1 / (1 + 10 ** (.5 * lp - .2)), .01, 1), "clint": clamp(3 * 10 ** (.35 * lp), .5, 300), "fa": fa,
-         "ka": 1.2 if tp <= 90 else .5, "efflux_brain": .3 if tp > 90 else 1.0, "clint_hep": None, "vss": None, "clr": None}
+    ion = p.get("ion"); fx = PKCAL["acid_fup"] if ion == "acid" else PKCAL["base_fup"] if ion == "base" else 1.0
+    d = {"fup": clamp(fx / (1 + 10 ** (.5 * lp - .2)), .003, 1), "clint": clamp(3 * PKCAL["cl_mult"] * 10 ** (PKCAL["cl_slope"] * lp), .5, 3000), "fa": fa,
+         "ka": 1.2 if tp <= 90 else .5, "efflux_brain": .3 if tp > 90 else 1.0, "clint_hep": None, "vss": None, "clr": None, "t_half": None, "clint_Lh": None}
     src = {k: "rule-based" for k in d}
     for k, v in o.items():
         if k in d and v is not None: d[k] = v; src[k] = o.get("_src", {}).get(k, "measured/model")
@@ -38,27 +39,35 @@ def predict(p, ovr=None):
 
 RT = {"liver": .45, "kidney": .4, "heart": .3, "brain": .1, "muscle": .15, "fat": .05, "skin": .3, "rest": .3, "gut": .3, "lung": .3}  # tissue protein binding vs plasma (approx)
 
-def kp(t, P, fup, plasma=None):
+# ionisation-class corrections to the rule-based predictions (acids: low free fraction, low tissue partitioning; bases: tissue/phospholipid binding), plus an IVIVE scale.
+# Constants were tuned on the DEV set in pkbench.py only and checked once on the blind TEST set.
+PKCAL = dict(cl_mult=0.5706, cl_slope=0.5075, acid_fup=0.03, base_fup=1, acid_kp=0.03, base_kp=30, lp_cap=2.5192)
+
+def kp(t, P, fup, plasma=None, ion=None):
     """tissue:plasma partition. Unbound drug equilibrates with tissue water + lipids; plus tissue-protein binding:
     Kp = fup*(water + neutral-lipid*P + phospholipid*(0.3P+0.7)) + r_t*(1-fup)"""
     fw, fnl, fph = TC[t]
-    return clamp(fup * (fw + fnl * P + fph * (.3 * P + .7)) + RT[t] * (1 - fup), .2, 60)
+    lip = fnl * P + fph * (.3 * P + .7); w = fw
+    if ion == "acid": lip *= PKCAL["acid_kp"]; w *= min(1.0, PKCAL["acid_kp"] * 2)
+    if ion == "base": lip = fnl * P + fph * (.3 * P + .7) * PKCAL["base_kp"]
+    return clamp(fup * (w + lip) + RT[t] * (1 - fup), .2, 60)
 
 def build(p, species, ovr=None, subj=None):
     s = SPECIES[species]; sj = subj or {}; bw = sj.get("bw", s["bw"]); d, src = predict(p, ovr); d = dict(d)
-    d["fup"] = clamp(d["fup"] * sj.get("fup_scale", 1), .003, 1); d["fa"] = clamp(d["fa"] * sj.get("fa_scale", 1), .03, 1); d["ka"] = d["ka"] * sj.get("ka_scale", 1); P = 10 ** clamp(p["logp"], -3, 6)
+    d["fup"] = clamp(d["fup"] * sj.get("fup_scale", 1), .003, 1); d["fa"] = clamp(d["fa"] * sj.get("fa_scale", 1), .03, 1); d["ka"] = d["ka"] * sj.get("ka_scale", 1); P = 10 ** clamp(min(p["logp"], PKCAL["lp_cap"]), -3, 6)   # Poulin-Theil overpredicts partitioning of very lipophilic drugs: cap the lipid-partition logP
     CO = s["qc"] * bw ** .75 * sj.get("qc_scale", 1); V = {k: v * bw for k, v in s["V"].items()}
     V["art"], V["ven"] = V["blood"] / 3, V["blood"] * 2 / 3; V["lumen"] = 1.0
     V["rest"] = bw - sum(V[k] for k in ("gut", "liver", "kidney", "heart", "brain", "lung", "muscle", "fat", "skin", "blood"))
     Q = {k: v * CO for k, v in s["Q"].items()}
     for k in ("liver_art", "gut"): Q[k] *= sj.get("hepq_scale", 1)   # splanchnic/hepatic flow (cirrhosis, heart failure)
     Q["rest"] = CO - sum(Q.values())
-    K = {t: kp(t, P, d["fup"]) for t in TIS + ["lung"]}
+    K = {t: kp(t, P, d["fup"], ion=p.get("ion")) for t in TIS + ["lung"]}
     if d.get("vss"):   # calibrate tissue partitioning so the model's Vss matches the supplied (measured / ADMET) Vss
         vt = sum(V[t] * K[t] for t in K); f = clamp((d["vss"] * bw - V["blood"]) / vt, .1, 10); K = {t: k * f for t, k in K.items()}
     if d["efflux_brain"] < 1: K["brain"] *= d["efflux_brain"]
     clint = (d["clint_hep"] * HEPC[species] if d.get("clint_hep") else d["clint"] * s["mppgl"]) * s["liver_g"] * bw * 1e-6 * 60 * sj.get("clint_scale", 1)
     clr = (d["clr"] or d["fup"] * s["gfr"] * bw) * sj.get("gfr_scale", 1)
+    if d.get("clint_Lh"): clint = d["clint_Lh"] * sj.get("clint_scale", 1)   # absolute intrinsic clearance resolved from a predicted half-life (see resolve_t_half)
     return dict(s=s, d=d, src=src, CO=CO, V=V, Q=Q, K=K, clint=clint, clr=clr, bw=bw)
 
 def _deriv(y, m):
@@ -87,7 +96,32 @@ def _expm(A, h):
     for _ in range(sq): R = _matmul(R, R)
     return R
 
+def ion_class(smi):
+    """'acid' | 'base' | 'zwitterion' | 'neutral' at pH 7.4 from substructures (approximate pKa classes); None if RDKit/SMILES unavailable"""
+    try:
+        from rdkit import Chem
+        m = Chem.MolFromSmiles(smi)
+        if m is None: return None
+        P = lambda q: m.HasSubstructMatch(Chem.MolFromSmarts(q))
+        acid = P("[CX3](=O)[OX2H1,OX1-]") or P("c1nn[nH]n1") or P("C(=O)[NH]S(=O)=O") or P("[SX4](=O)(=O)[OH]")
+        base = P("[NX3;H2,H1,H0;!$(NC=[O,S,N]);!$(N-a);!$(N-[SX4]);!$(N-N);!$(N-O);!$(NC#N);!$(N-C=C)]([#6])") or P("[NX3]C(=[NH,NH2+])[NX3]") or P("C(=N)N")
+        return "zwitterion" if acid and base else "acid" if acid else "base" if base else "neutral"
+    except Exception: return None
+
+_RES = {}
+def resolve_t_half(p, species, ovr):
+    """ovr with a predicted terminal half-life: find the intrinsic clearance (L/h) whose simulated terminal t1/2 matches it (log-bisection), cached"""
+    key = (round(p["logp"], 3), round(p["mw"], 1), species, tuple(sorted((k, round(v, 5)) for k, v in ovr.items() if isinstance(v, (int, float)))))
+    if key in _RES: return _RES[key]
+    tgt = ovr["t_half"]; base = {k: v for k, v in ovr.items() if k not in ("t_half", "clint_hep", "clint_Lh")}; lo, hi = math.log(1e-2), math.log(1e5); hrs = clamp(12 * tgt, 48, 600)
+    for _i in range(16):
+        mid = (lo + hi) / 2; r = simulate(p, species, 100.0, hrs, "po", every=max(.2, hrs / 400), ovr=dict(base, clint_Lh=math.exp(mid))); th = r["t_half"] or 1e4
+        if th > tgt: lo = mid
+        else: hi = mid
+    _RES[key] = dict(base, clint_Lh=math.exp((lo + hi) / 2), _src=dict(ovr.get("_src", {}), clint_Lh="resolved from ADMET-AI half-life")); return _RES[key]
+
 def simulate(p, species="human", dose_mg=100.0, hours=48.0, route="po", every=.1, ovr=None, subj=None, **_):
+    if ovr and ovr.get("t_half") and not ovr.get("clint_Lh"): ovr = resolve_t_half(p, species, ovr)
     """returns dict: t, cp (plasma mg/L), tissue conc (mg/L), PK metrics, mass balance, parameters + their source"""
     m = build(p, species, ovr, subj); n_st = len(ST); A = [[0.0] * n_st for _ in range(n_st)]
     for j in range(n_st):
@@ -111,7 +145,8 @@ def simulate(p, species="human", dose_mg=100.0, hours=48.0, route="po", every=.1
             "clint_Lh": m["clint"], "clr_Lh": m["clr"], "CO_Lh": m["CO"], "Kp": m["K"]}
 
 def bioavailability(p, species="human", dose_mg=100.0, hours=48.0, ovr=None, subj=None):
-    po = simulate(p, species, dose_mg, hours, "po", ovr=ovr, subj=subj); iv = simulate(p, species, dose_mg, hours, "iv", ovr=ovr, subj=subj)
+    ev = max(.1, hours / 700.0)   # coarser step for very long half-lives (exact matrix exponential, so accuracy is kept)
+    po = simulate(p, species, dose_mg, hours, "po", every=ev, ovr=ovr, subj=subj); iv = simulate(p, species, dose_mg, hours, "iv", every=ev, ovr=ovr, subj=subj)
     return po, iv, po["auc"] / iv["auc"] if iv["auc"] else 0.0
 
 def steady_state(res, tau=24.0):

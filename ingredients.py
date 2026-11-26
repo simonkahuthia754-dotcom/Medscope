@@ -31,6 +31,7 @@ def profile(name, dose_mg=100.0):
         ps = potency.standardize(pc["smiles"]); m = Chem.MolFromSmiles(ps)
         if m: pc = dict(pc, smiles=ps); p = {"logp": Crippen.MolLogP(m), "mw": Descriptors.MolWt(m), "tpsa": rdMolDescriptors.CalcTPSA(m)}
     except Exception: pass
+    p["ion"] = pbpk.ion_class(pc["smiles"]) if pc.get("smiles") else None
     out = {"name": name, "smiles": pc["smiles"], "props": p, "flags": [], "cyp_sub": [], "ovr": None, "admet": {}}
     try:
         import admet

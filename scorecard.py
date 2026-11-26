@@ -22,13 +22,13 @@ def c_potency():
     a = S("qsar_auc"); v = 7 * fr(a, .8) if a else 0
     return v, 7, f"QSAR ROC AUC {a:.2f} (target >=0.80), RMSE {S('qsar_rmse', 0):.2f} log units" if a else "QSAR not yet run on real ChEMBL data  -> run: discover <disease>"
 def c_pk():
-    b = max(S("pk_2fold_rule", 0), S("pk_2fold_admet", 0)); v = 8 * fr(b, 70)
-    return v, 8, f"{b}% of benchmark half-lives within 2-fold (target >=70%); rule-based {S('pk_2fold_rule', 'n/a')}%, ADMET-AI {S('pk_2fold_admet', 'not run')}"
+    b = max(S("pk_test_rule", 0), S("pk_test_admet", 0)); v = 8 * fr(b, 70)
+    return v, 8, f"BLIND-test half-lives within 2-fold: {b}% (target >=70%); rule-based {S('pk_test_rule', 'n/a')}%, ADMET-AI-resolved {S('pk_test_admet', 'not run')}% (tuning set: {S('pk_dev_rule', 'n/a')}%)"
 def c_dock():
     r, rho = S("redock_rmsd"), S("dock_rho"); v = (2.5 if r is not None and r <= 2 else 0) + (2.5 if rho is not None and rho >= .3 else 0)
     return v, 5, f"redock RMSD {r if r is not None else 'not run'} (target <=2 A), Vina-vs-measured rho {rho if rho is not None else 'not run'} (target >=0.3)"
 def c_human():
-    v = (4 if S("offline_pass") else 0) + (2 if S("expr_ok") else 0) + 2 * fr(max(S("pk_2fold_rule", 0), S("pk_2fold_admet", 0)), 70)
+    v = (4 if S("offline_pass") else 0) + (2 if S("expr_ok") else 0) + 2 * fr(max(S("pk_test_rule", 0), S("pk_test_admet", 0)), 70)
     return v, 8, f"PBPK+population checks {'pass' if S('offline_pass') else 'not run'}; human target expression {'live' if S('expr_ok') else 'untested'}; physiology accuracy tied to PK benchmark"
 def c_lab():
     R = [r for r in lab.load() if r.get("predicted_pic50") is not None and r.get("ic50_nM")]; n = len(R); v = 3 if S("offline_pass") else 0; ev = f"{n} prospective tests logged"

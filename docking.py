@@ -34,8 +34,9 @@ def prepare(pdb_id, lig_id=None):
     (lig_id None = auto-pick the largest non-solvent HETATM group)"""
     need(); src = fetch_pdb(pdb_id); prot, groups = [], {}
     for l in open(src):
-        if l.startswith("ATOM"): prot.append(l)
-        elif l.startswith("HETATM") and l[17:20].strip() not in SOLV and l[76:78].strip() != "H": groups.setdefault((l[17:20].strip(), l[21]), []).append(l)
+        if l.startswith("ATOM"):
+            if l[16] in " A": prot.append(l)    # keep a single alternate location: duplicated overlapping atoms would clash and block the pocket
+        elif l.startswith("HETATM") and l[16] in " A" and l[17:20].strip() not in SOLV and l[76:78].strip() != "H": groups.setdefault((l[17:20].strip(), l[21]), []).append(l)
     cand = {k: v for k, v in groups.items() if lig_id is None or k[0] == lig_id}
     if not cand: raise RuntimeError(f"no ligand{' ' + lig_id if lig_id else ''} found in {pdb_id}")
     (lig_id, chain), lig = max(cand.items(), key=lambda kv: len(kv[1]))

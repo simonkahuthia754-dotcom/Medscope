@@ -57,7 +57,7 @@ def profile(smi, ad, ic50_nM=None, model=None):
     import admet, ingredients
     from rdkit import Chem
     from rdkit.Chem import Descriptors, Crippen, rdMolDescriptors
-    m = Chem.MolFromSmiles(smi); p = dict(logp=Crippen.MolLogP(m), mw=Descriptors.MolWt(m), tpsa=rdMolDescriptors.CalcTPSA(m)); ovr = admet.overrides(ad)
+    m = Chem.MolFromSmiles(smi); p = dict(logp=Crippen.MolLogP(m), mw=Descriptors.MolWt(m), tpsa=rdMolDescriptors.CalcTPSA(m), ion=pbpk.ion_class(smi)); ovr = admet.overrides(ad)
     po, iv, F = pbpk.bioavailability(p, "human", 100.0, 48.0, ovr=ovr); exp = ingredients.exposure(po); rk, idx = risks(ad, exp)
     pot = None
     if model is not None:

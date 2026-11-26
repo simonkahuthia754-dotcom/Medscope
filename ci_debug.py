@@ -18,6 +18,12 @@ try:
     from rdkit.Chem import AllChem, rdMolAlign
     T = docking.prepare("1M17"); native = docking.native_smiles(T["lig"]); print("native smiles", native, "center", T["center"], "size", T["size"])
     crystal = AllChem.AssignBondOrdersFromTemplate(Chem.MolFromSmiles(native), Chem.MolFromPDBFile(T["crystal"])); print("crystal atoms", crystal.GetNumHeavyAtoms(), "centroid", crystal.GetConformer().GetPositions().mean(0))
+    import re
+    raw = open(docking.fetch_pdb("1M17")).read().splitlines(); alt = [l for l in raw if l.startswith(("ATOM", "HETATM")) and l[16] not in " A"]; print("altloc lines dropped:", len(alt), "| receptor pdbqt atoms:", sum(1 for l in open(T["rec"]) if l.startswith(("ATOM", "HETATM"))))
+    v = docking.Vina(sf_name="vina", seed=1); v.set_receptor(T["rec"]); cm = Chem.AddHs(crystal, addCoords=True)
+    from meeko import MoleculePreparation, PDBQTWriterLegacy
+    s, ok, err = PDBQTWriterLegacy.write_string(MoleculePreparation().prepare(cm)[0]); v.set_ligand_from_string(s); v.compute_vina_maps(center=list(T["center"]), box_size=[T["size"]] * 3)
+    print("crystal pose Vina score in place:", v.score()[0], "| after local optimisation:", v.optimize()[0])
     for exh, seed in ((16, 7), (32, 7), (32, 11), (64, 3)):
         s = docking._lig(native, seed); v = docking.Vina(sf_name="vina", seed=seed); v.set_receptor(T["rec"]); v.set_ligand_from_string(s)
         v.compute_vina_maps(center=list(T["center"]), box_size=[T["size"]] * 3); v.dock(exhaustiveness=exh, n_poses=10); en = v.energies(n_poses=10)

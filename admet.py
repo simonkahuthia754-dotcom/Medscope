@@ -31,6 +31,8 @@ def overrides(pr):
     if ppb is not None: o["fup"] = clamp(1 - ppb / 100, .005, 1); o["_src"]["fup"] = "ADMET-AI (PPBR)"
     if clh is not None and clh > 0: o["clint_hep"] = clh; o["_src"]["clint_hep"] = "ADMET-AI (hepatocyte CL)"
     if vss is not None and vss > 0: o["vss"] = vss; o["_src"]["vss"] = "ADMET-AI (VDss)"
+    th = get(pr, "Half_Life")
+    if th is not None and th > 0: o["t_half"] = th; o["_src"]["t_half"] = "ADMET-AI (Half_Life_Obach)"
     if hia is not None: o["fa"] = clamp(.2 + .8 * hia, .2, 1); o["_src"]["fa"] = "ADMET-AI (HIA)"
     return o
 

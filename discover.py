@@ -76,7 +76,7 @@ def run(key, top=5, n=60, pop=100, dock_on=True):
         a = pr.get(c["smiles"], {}); c["admet"] = {k: admet.get(a, k) for k in ("hERG", "DILI", "AMES")} if a else {}
         c["ovr"] = admet.overrides(a) if a else None; c["flags"] = admet.flags(a) if a else []; fp = chemistry.fp(chemistry.mol(c["smiles"]))
         c["toxin_sim"] = max([DataStructs.TanimotoSimilarity(fp, t) for t in tx.values()] or [0]); c["near_fail"] = any(DataStructs.TanimotoSimilarity(fp, f) >= .7 for f in fails)
-        p = {"logp": c["logp"], "mw": c["mw"], "tpsa": c["tpsa"]}; po, iv, c["F"] = pbpk.bioavailability(p, "human", 100.0, 48.0, ovr=c["ovr"]); c["po"] = po
+        p = {"logp": c["logp"], "mw": c["mw"], "tpsa": c["tpsa"], "ion": pbpk.ion_class(c["smiles"])}; po, iv, c["F"] = pbpk.bioavailability(p, "human", 100.0, 48.0, ovr=c["ovr"]); c["po"] = po
         c["dose"], _ = pbpk.dose_for_target(p, "human", c["pot"]["ic50_nM"], c["mw"], ovr=c["ovr"]); c["dose_hi"], _ = pbpk.dose_for_target(p, "human", c["pot"]["ic50_hi"], c["mw"], ovr=c["ovr"])
         c["rat"] = pbpk.bioavailability(p, "rat", 5 * .25, 24.0, ovr=c["ovr"]); c["exp"] = exposure(po)
         if T:
@@ -97,7 +97,7 @@ def run(key, top=5, n=60, pop=100, dock_on=True):
         if c["dose"]:
             print(f"   dose to hold free trough >= IC50: {c['dose']:.0f} mg/day (pessimistic IC50: {c['dose_hi']:.0f} mg/day)")
             if c["dose"] <= 1000:
-                cyp = (D.get("cyp") if D.get("cyp") in humanbio.PHENO else None); r = humanbio.population_pk({"logp": c["logp"], "mw": c["mw"], "tpsa": c["tpsa"]}, c["dose"], ovr=c["ovr"],
+                cyp = (D.get("cyp") if D.get("cyp") in humanbio.PHENO else None); r = humanbio.population_pk({"logp": c["logp"], "mw": c["mw"], "tpsa": c["tpsa"], "ion": pbpk.ion_class(c["smiles"])}, c["dose"], ovr=c["ovr"],
                     subs=humanbio.population(pop, cyp=cyp), ic50_nM=P["ic50_nM"], mw=c["mw"])
                 print(f"   virtual population (n={r['n']}): effective trough in {r['pct_covered']:.0f}% of subjects; t1/2 {r['t_half']['p5']:.0f}-{r['t_half']['p95']:.0f} h (5th-95th pct)"
                       + (" | by " + cyp + " phenotype: " + ", ".join(f"{k} {v[1]:.0f}% (n={v[0]})" for k, v in r["by_phenotype"].items()) if cyp else ""))
