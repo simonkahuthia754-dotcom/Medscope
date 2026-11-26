@@ -1,0 +1,20 @@
+name: verify
+on: workflow_dispatch
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with: {python-version: "3.11", channels: "conda-forge", channel-priority: strict}
+      - name: install
+        shell: bash -el {0}
+        run: |
+          conda install -y rdkit vina openbabel || true
+          pip install meeko admet-ai scikit-learn || true
+      - name: verify
+        shell: bash -el {0}
+        run: python verify.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: medscope-verify, path: medscope_out/}

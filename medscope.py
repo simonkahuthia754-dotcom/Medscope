@@ -149,6 +149,11 @@ HELP = """MedScope commands (or run: python medscope.py <cmd> <disease>)
   help | quit   (menu mode remembers your last disease: just type a command alone)"""
 
 def run(cmd, rest, last):
+    if cmd in ("mechanism", "how"):
+        import reverse_bioengineering as rb
+        try: rb.analyze(rest.replace("--save","").strip(), save="--save" in rest) if rest.replace("--save","").strip() else print("usage: mechanism <disease> [--save]")
+        except Exception as e: print(w(f"! {e}"))
+        return last
     if cmd == "score": import scorecard; scorecard.main(); return last
     if cmd == "onboard":
         import onboard

@@ -10,8 +10,8 @@ def S(k, d=None): return state.load().get(k, d)
 fr = lambda x, full: max(0.0, min(1.0, x / full))
 
 def c_disease():
-    n = len(diseases.BUILTIN); v = (3 if n >= 10 else 1) + (5 if S("onboard_ok") else 0)
-    return v, 8, f"{n} curated diseases" + ("; auto-onboarding of ANY disease verified live" if S("onboard_ok") else "; auto-onboarding NOT yet run live  -> run: onboard \"<disease>\"")
+    n = len(diseases.BUILTIN); v = (2 if n >= 10 else 1) + (3 if S("onboard_ok") else 0) + (3 if S("mechanism_ok") else 0)
+    return v, 8, f"{n} curated diseases" + ("; auto-onboarding of ANY disease verified live" if S("onboard_ok") else "; auto-onboarding NOT yet run live  -> run: onboard \"<disease>\"") + ("; mechanism (reverse-engineering) verified live" if S("mechanism_ok") else "; mechanism not yet run live -> run: mechanism \"<disease>\"")
 def c_drugs():
     lib = S("library_n", 0); v = (4 if lib >= 1000 else 0) + (2 if S("pubchem_ok") else 0) + (2 if S("gen_ok") else 0)
     return v, 8, f"approved-drug library {lib or 'not loaded'}; name/SMILES lookup {'ok' if S('pubchem_ok') else 'untested'}; new-molecule generation {'ok' if S('gen_ok') else 'untested'}"
