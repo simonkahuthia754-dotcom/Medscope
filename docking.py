@@ -25,6 +25,10 @@ def fetch_pdb(pid):
 
 SOLV = {"HOH", "WAT", "SO4", "PO4", "GOL", "EDO", "PEG", "PGE", "MG", "ZN", "CA", "NA", "CL", "K", "MN", "FE", "NI", "CO", "CU", "CD", "ACT", "DMS", "FMT", "TRS", "MES", "EPE", "BME", "IOD", "BR", "NO3", "ACY", "IPA", "MPD", "PG4", "1PE", "P6G"}
 
+def _pq(s):
+    try: return PDBQTMolecule(s, is_dock=True)   # meeko <=0.5
+    except TypeError: return PDBQTMolecule(s)         # meeko >=0.6 auto-detects Vina output
+
 def prepare(pdb_id, lig_id=None):
     """-> dict(rec, center, size, crystal, lig): protein only, hydrogens at pH 7.4, box centred on the co-crystal ligand
     (lig_id None = auto-pick the largest non-solvent HETATM group)"""
@@ -68,7 +72,7 @@ def redock_rmsd(T, native=None):
     native = native or native_smiles(T["lig"]); r = dock(T, native)
     if not r: return None
     crystal = AllChem.AssignBondOrdersFromTemplate(Chem.MolFromSmiles(native), Chem.MolFromPDBFile(T["crystal"]))
-    pose = RDKitMolCreate.from_pdbqt_mol(PDBQTMolecule(r[1], is_dock=True))[0]
+    pose = RDKitMolCreate.from_pdbqt_mol(_pq(r[1]))[0]
     return r[0], rdMolAlign.CalcRMS(Chem.RemoveHs(pose), Chem.RemoveHs(crystal))
 
 def _rank(x):
