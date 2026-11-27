@@ -45,6 +45,7 @@ def analogs(smi, n=40, sim_min=.6, seed=7):
         mm = chemistry.mol(s)
         if mm is None: continue
         sim = DataStructs.TanimotoSimilarity(fp0, chemistry.fp(mm))
+        if s.count("F") > max(3, smi.count("F") + 1) or "C(F)(F)O" in s or "OC(F)(F)" in s: continue   # no polyfluoro-ether 'tricks': score gains there are model artefacts, not realistic chemistry
         if sim >= sim_min and s != potency.standardize(smi): out[s] = sim
     return sorted(out.items(), key=lambda kv: -kv[1])[:n]
 
