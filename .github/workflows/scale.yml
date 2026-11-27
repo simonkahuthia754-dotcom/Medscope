@@ -1,0 +1,16 @@
+name: scale
+on: workflow_dispatch
+jobs:
+  scale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with: {python-version: "3.11", channels: conda-forge}
+      - shell: bash -el {0}
+        run: conda install -y rdkit scikit-learn && pip install admet-ai
+      - shell: bash -el {0}
+        run: |
+          python screen.py all --limit 400000 --top 8 2>&1 | tail -150
+          python evolve.py lung-cancer --gens 6 2>&1 | tail -30

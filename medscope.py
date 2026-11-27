@@ -142,6 +142,9 @@ HELP = """MedScope commands (or run: python medscope.py <cmd> <disease>)
   score                evidence-based rating of MedScope (verified vs ceiling)
   onboard <disease>    add ANY disease automatically (targets, ChEMBL, PDB); or --uniprot ACC --name X for a new pathogen
   repurpose <disease>  screen ALL approved drugs against that disease's target
+  screen <disease|all> [--limit N]  million-scale ChEMBL screen (potency model + organ risk), all diseases
+  evolve <disease>     generate NOVEL molecules by evolutionary design
+  campaign [--evolve]  every disease at once -> master table
   drug <name>          any drug/product: ingredients, structure, human PBPK, flags
   combo <a> <b> ...    combination/regimen checks (organ overlap, shared tox, CYP DDI)
   selftest             what works on this device + offline correctness checks
@@ -149,6 +152,11 @@ HELP = """MedScope commands (or run: python medscope.py <cmd> <disease>)
   help | quit   (menu mode remembers your last disease: just type a command alone)"""
 
 def run(cmd, rest, last):
+    if cmd in ("screen", "evolve", "campaign"):
+        try:
+            import importlib; importlib.import_module(cmd).cli(rest.split())
+        except Exception as e: print(w(f"! {e}"))
+        return last
     if cmd in ("recreate", "stabilize", "population", "person"):
         try:
             if cmd == "recreate": import recreation_bioengineering as x; x.cli(rest.split())

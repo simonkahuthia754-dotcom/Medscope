@@ -54,9 +54,14 @@ def c_pop():
     v = (3 if S("pop_ok") else 0) + (1 if (S("pop_r2") or 0) >= .95 else 0) + (1 if (S("pop_n") or 0) >= 10000 else 0)
     return v, 5, f"mass-population checks {'pass' if S('pop_ok') else 'not run'}; n={S('pop_n', 0)}, surrogate R2 {S('pop_r2', 'n/a')}; ancestry genes, liver/kidney/heart disease, food, age, weight, sex"
 
+def c_scale():
+    n = S("screened_n", 0); d = max(S("screen_diseases", 0), S("campaign_diseases", 0)); nov = S("evolve_novel", 0)
+    v = 1.5 * fr(math.log10(n + 1), 6) + 1.5 * fr(d, 10) + 1.0 * fr(math.log10(nov + 1), 3)
+    return v, 4, f"{n:,} structures screened (goal 1,000,000), {d} diseases with a trained model (goal 10), {nov} novel generated molecules (goal 1,000); potency models only cover targets with measured data"
+
 CR = [("Disease coverage: any disease + new targets", c_disease), ("Drug coverage: every approved drug + new molecules", c_drugs), ("Ingredients & combinations", c_ingred),
       ("Potency prediction (measured-data QSAR)", c_potency), ("ADMET / PK accuracy (validated)", c_pk), ("Structure docking (trust-gated)", c_dock),
-      ("Human biology realism", c_human), ("Lab feedback loop (prospective accuracy)", c_lab), ("Reliability & device support", c_reliab), ("Safety & honesty", c_honest), ("Disease recreation (validated mechanism)", c_recreate), ("Toxicity stabilization", c_stab), ("Mass-population human simulation", c_pop)]
+      ("Human biology realism", c_human), ("Lab feedback loop (prospective accuracy)", c_lab), ("Reliability & device support", c_reliab), ("Safety & honesty", c_honest), ("Disease recreation (validated mechanism)", c_recreate), ("Toxicity stabilization", c_stab), ("Scale: chemical space & disease breadth", c_scale), ("Mass-population human simulation", c_pop)]
 
 def main(refresh=True):
     if refresh:

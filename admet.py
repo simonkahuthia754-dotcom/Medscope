@@ -1,6 +1,7 @@
 """admet.py - ADMET-AI (Chemprop-RDKit models trained on ~41 TDC/ChEMBL measured ADMET datasets) -> PBPK parameters + safety flags.
 Install: pip install admet-ai   (PC/Colab/server; needs torch; not for QPython). Predictions are model outputs with typical
 2-3x error on clearance/Vss; use `validate.py --admet` to measure accuracy on known drugs, and replace with measured data when available."""
+import os
 try:
     from admet_ai import ADMETModel
     HAVE = True
@@ -32,7 +33,7 @@ def overrides(pr):
     if clh is not None and clh > 0: o["clint_hep"] = clh; o["_src"]["clint_hep"] = "ADMET-AI (hepatocyte CL)"
     if vss is not None and vss > 0: o["vss"] = vss; o["_src"]["vss"] = "ADMET-AI (VDss)"
     th = get(pr, "Half_Life")
-    if th is not None and th > 0: o["t_half"] = th; o["_src"]["t_half"] = "ADMET-AI (Half_Life_Obach)"
+    if th is not None and th > 0 and os.environ.get("MEDSCOPE_ADMET_HALF"): o["t_half"] = th; o["_src"]["t_half"] = "ADMET-AI (Half_Life_Obach)"
     if hia is not None: o["fa"] = clamp(.2 + .8 * hia, .2, 1); o["_src"]["fa"] = "ADMET-AI (HIA)"
     return o
 
