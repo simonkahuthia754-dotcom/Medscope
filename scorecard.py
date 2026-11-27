@@ -59,9 +59,13 @@ def c_scale():
     v = 1.5 * fr(math.log10(n + 1), 6) + 1.5 * fr(d, 10) + 1.0 * fr(math.log10(nov + 1), 3)
     return v, 4, f"{n:,} structures screened (goal 1,000,000), {d} diseases with a trained model (goal 10), {nov} novel generated molecules (goal 1,000); potency models only cover targets with measured data"
 
+def c_robust():
+    ks = ("static", "url_policy", "private_dir", "offline", "fast", "core_imports"); v = sum(1 for k in ks if S("rob_" + k)); pf = 1 if S("prefetch_ok") else 0
+    return v * .6 + pf * .4, 4, f"{v}/{len(ks)} robustness checks pass (security audit, https allow-list, private data dir, offline replay, fast cache, portable core); offline prefetch {'run' if pf else 'not run'}; run: audit"
+
 CR = [("Disease coverage: any disease + new targets", c_disease), ("Drug coverage: every approved drug + new molecules", c_drugs), ("Ingredients & combinations", c_ingred),
       ("Potency prediction (measured-data QSAR)", c_potency), ("ADMET / PK accuracy (validated)", c_pk), ("Structure docking (trust-gated)", c_dock),
-      ("Human biology realism", c_human), ("Lab feedback loop (prospective accuracy)", c_lab), ("Reliability & device support", c_reliab), ("Safety & honesty", c_honest), ("Disease recreation (validated mechanism)", c_recreate), ("Toxicity stabilization", c_stab), ("Scale: chemical space & disease breadth", c_scale), ("Mass-population human simulation", c_pop)]
+      ("Human biology realism", c_human), ("Lab feedback loop (prospective accuracy)", c_lab), ("Reliability & device support", c_reliab), ("Safety & honesty", c_honest), ("Disease recreation (validated mechanism)", c_recreate), ("Toxicity stabilization", c_stab), ("Scale: chemical space & disease breadth", c_scale), ("Robustness: offline, secure, portable, fast", c_robust), ("Mass-population human simulation", c_pop)]
 
 def main(refresh=True):
     if refresh:
@@ -71,6 +75,11 @@ def main(refresh=True):
     print(f"\n{'criterion':<52}{'verified':>9}{'ceiling':>9}")
     for nm, f in CR:
         v, c, ev = f(); v = min(v, c); tv += v; tc += c; print(f"{nm:<52}{v:>9.1f}{c:>9}\n    {ev}")
+    miss = []
+    for nm, f in CR:
+        v, cc, _ = f(); tgt = .98 if nm.startswith("Disease recreation") else .89
+        if min(v, cc) / cc < tgt: miss.append(f"{nm} {100 * min(v, cc) / cc:.0f}% (target {100 * tgt:.0f}%)")
+    print(f"\nPER-CRITERION TARGETS (>=89% each, recreation >=98%): " + ("ALL MET" if not miss else f"{len(CR) - len(miss)}/{len(CR)} met. Below target: " + "; ".join(miss)))
     print(f"\nVERIFIED SCORE: {tv:.0f} / 100   ({100 * tv / tc:.0f}% of the {tc}-point software ceiling)")
     print(f"'80%' of the ceiling = {0.8 * tc:.0f} points. The remaining {100 - tc} points need real lab/animal/clinical evidence that software cannot supply.")
     gaps = sorted(((c - min(f()[0], c), nm) for nm, f in CR), reverse=True)[:4]

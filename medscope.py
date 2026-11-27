@@ -16,17 +16,9 @@ def _cache():
     except Exception: return {}
 
 def get(url, data=None, hdr=None):
-    k = hashlib.md5((url + (data or "")).encode()).hexdigest(); c = _cache()
-    if k in c and time.time() - c[k][0] < TTL: return c[k][1]
-    rq = urllib.request.Request(url, data=data.encode() if data else None, headers={"User-Agent": "MedScope/1.0", **(hdr or {})})
-    try:
-        with urllib.request.urlopen(rq, timeout=25) as r: j = json.loads(r.read().decode())
-    except Exception as e:
-        raise RuntimeError(f"network/API error: {e}")
-    c[k] = [time.time(), j]
-    try: json.dump(c, open(CF, "w"))
-    except Exception: pass
-    return j
+    import sources
+    try: return sources.J(url, data, hdr, ttl=TTL)
+    except Exception as e: raise RuntimeError(f"network/API error: {e}")
 
 def papers(q, n=10, recent=True):
     p = urllib.parse.urlencode({"db": "pubmed", "term": q, "retmode": "json", "retmax": n, "sort": "date" if recent else "relevance"})
@@ -152,6 +144,8 @@ HELP = """MedScope commands (or run: python medscope.py <cmd> <disease>)
   help | quit   (menu mode remembers your last disease: just type a command alone)"""
 
 def run(cmd, rest, last):
+    if cmd in ("prefetch", "download", "audit"):
+        import offline; offline.cli([cmd] + rest.split()); return last
     if cmd in ("screen", "evolve", "campaign"):
         try:
             import importlib; importlib.import_module(cmd).cli(rest.split())

@@ -3,28 +3,69 @@ Europe PMC & OpenAlex (papers) | PubChem (real properties) | ChEMBL (measured IC
 import json, os, time, hashlib, statistics, urllib.request, urllib.parse, urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
-CF = os.path.join(os.path.expanduser("~"), ".medscope", "cache2.json"); TTL = 12 * 3600
-Q = urllib.parse.quote
+import gzip, sqlite3, threading, urllib.parse as _up
+HOME = os.environ.get("MEDSCOPE_HOME") or os.path.join(os.path.expanduser("~"), ".medscope")
+CF = os.path.join(HOME, "cache.db"); TTL = 12 * 3600; STALE_OK = 365 * 86400; MAXB = 64 * 1024 * 1024
+HOSTS = ("ebi.ac.uk", "ncbi.nlm.nih.gov", "openalex.org", "rcsb.org", "opentargets.org", "string-db.org", "uniprot.org", "nlm.nih.gov", "clinicaltrials.gov", "who.int", "wwwdev.ebi.ac.uk", "files.rcsb.org", "data.rcsb.org")
+Q = urllib.parse.quote; _L = threading.Lock(); STATS = dict(hit=0, net=0, stale=0, fail=0)
+
+def offline(): return os.environ.get("MEDSCOPE_OFFLINE", "") not in ("", "0")
+
+def _secure_dir(p):
+    os.makedirs(p, exist_ok=True)
+    try: os.chmod(p, 0o700)
+    except Exception: pass
+
+def _db():
+    _secure_dir(HOME); c = sqlite3.connect(CF, timeout=30); c.execute("PRAGMA journal_mode=WAL"); c.execute("CREATE TABLE IF NOT EXISTS c(k TEXT PRIMARY KEY, t REAL, v BLOB)"); return c
+
+def _get(k):
+    try:
+        with _L, _db() as c: r = c.execute("SELECT t, v FROM c WHERE k=?", (k,)).fetchone()
+        return (r[0], json.loads(gzip.decompress(r[1]).decode())) if r else None
+    except Exception: return None
+
+def _put(k, j):
+    try:
+        with _L, _db() as c: c.execute("REPLACE INTO c VALUES(?,?,?)", (k, time.time(), gzip.compress(json.dumps(j).encode(), 3)))
+    except Exception: pass
+
+def safe_url(url):
+    u = _up.urlparse(url)
+    if u.scheme != "https" or not u.hostname or not any(u.hostname == h or u.hostname.endswith("." + h) for h in HOSTS): raise ValueError(f"blocked URL (https + allow-listed hosts only): {url[:80]}")
+    return url
 
 def J(url, data=None, hdr=None, ttl=TTL):
-    k = hashlib.md5((url + (data or "")).encode()).hexdigest()
-    try: c = json.load(open(CF))
-    except Exception: c = {}
-    if k in c and time.time() - c[k][0] < ttl: return c[k][1]
-    rq = urllib.request.Request(url, data=data.encode() if data else None, headers={"User-Agent": "MedScope/2.0", **(hdr or {})})
+    """cached JSON fetch: fresh cache -> network (retry, size cap, https allow-list) -> STALE cache if the network is down; MEDSCOPE_OFFLINE=1 never touches the network"""
+    safe_url(url); k = hashlib.sha1((url + (data or "")).encode()).hexdigest(); c = _get(k)
+    if c and (time.time() - c[0] < ttl or offline()): STATS["hit"] += 1; return c[1]
+    if offline(): STATS["fail"] += 1; raise RuntimeError("offline and not cached: run `prefetch` once on a connection")
+    rq = urllib.request.Request(url, data=data.encode() if data else None, headers={"User-Agent": "Mozilla/5.0 (compatible; MedScope)", "Accept-Encoding": "gzip", **(hdr or {})}); err = None; j = None
     for a in range(4):   # retry transient server/network errors (5xx, timeouts), never client errors
         try:
-            with urllib.request.urlopen(rq, timeout=40) as r: j = json.loads(r.read().decode())
-            break
+            with urllib.request.urlopen(rq, timeout=40) as r:
+                raw = r.read(MAXB + 1)
+                if len(raw) > MAXB: raise ValueError("response too large")
+                if r.headers.get("Content-Encoding") == "gzip": raw = gzip.decompress(raw)
+                j = json.loads(raw.decode()); break
         except urllib.error.HTTPError as e:
-            if e.code < 500 or a == 3: raise
-        except (TimeoutError, urllib.error.URLError, ConnectionError):
-            if a == 3: raise
-        time.sleep(2 * 2 ** a)
-    c[k] = [time.time(), j]
-    try: os.makedirs(os.path.dirname(CF), exist_ok=True); json.dump(c, open(CF, "w"))
-    except Exception: pass
-    return j
+            err = e
+            if e.code < 500 or a == 3: break
+        except (TimeoutError, urllib.error.URLError, ConnectionError, OSError) as e:
+            err = e
+            if a == 3: break
+        time.sleep(1.5 * 2 ** a)
+    if j is not None:
+        STATS["net"] += 1; _put(k, j); return j
+    if c and time.time() - c[0] < STALE_OK: STATS["stale"] += 1; return c[1]     # weak/no connection: serve the last good answer
+    STATS["fail"] += 1; raise err or RuntimeError("fetch failed")
+
+def cache_info():
+    try:
+        with _db() as c: n, = c.execute("SELECT COUNT(*) FROM c").fetchone()
+        return n, os.path.getsize(CF) / 1e6
+    except Exception: return 0, 0.0
+
 
 def europepmc(q, n=10):
     r = J(f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={Q(q)}&format=json&pageSize={n}&sort=P_PDATE_D%20desc")["resultList"]["result"]

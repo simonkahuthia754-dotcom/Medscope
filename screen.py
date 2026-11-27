@@ -18,7 +18,8 @@ def chemreps_url():
 
 def stream(limit=None, url=None):
     """yield (chembl_id, smiles) for every structure, streaming (no 250 MB download to disk)"""
-    r = urllib.request.urlopen(url or chemreps_url(), timeout=120); n = 0
+    import offline; loc = os.environ.get("MEDSCOPE_CHEMREPS") or offline.CHEMREPS; n = 0      # local copy (offline.py download) -> no network at all
+    r = open(loc, "rb") if os.path.exists(loc) else urllib.request.urlopen(url or chemreps_url(), timeout=120)
     with gzip.GzipFile(fileobj=r) as f:
         next(f)
         for line in f:

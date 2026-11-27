@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """verify.py - run every live check that earns scorecard points, on a machine WITH internet + RDKit/Vina/ADMET-AI (PC, Colab, GitHub Actions).
   python verify.py        -> runs each step, tolerates failures, prints scorecard, saves medscope_out/verify.json + scorecard.txt"""
-import contextlib, io, json, os, subprocess, sys, time, traceback
+import os, contextlib, io, json, os, subprocess, sys, time, traceback
 os.makedirs("medscope_out", exist_ok=True); R = {}
 def step(name, f):
     t = time.time(); buf = io.StringIO()
@@ -50,7 +50,11 @@ def dsc(): import discover; discover.run("lung-cancer", 5, 30, 50, True)
 def rep(): import library; library.repurpose("blood-cancer", 10)
 def mech(): import reverse_bioengineering as rb; rb.analyze("HIV infection", key="hiv")
 def disc_chk(): import diseases; diseases.check("lung-cancer")
-for n, f in [("env", env), ("selftest", sel), ("validate", val), ("onboard", onb), ("library", lib), ("drug", drg), ("combo", cmb), ("population", popn), ("recreate", rec), ("stabilize", stab), ("docking", dck), ("discover", dsc), ("repurpose", rep), ("mechanism", mech), ("check", disc_chk)]: step(n, f)
+def scl():
+    import screen, evolve; r = screen.run(["lung-cancer", "flu", "fungi"], limit=int(os.environ.get("SCREEN_LIMIT", "300000")), top=5); evolve.evolve("lung-cancer", gens=5, pop=150, top=5)
+def rob():
+    import offline; offline.prefetch(["lung-cancer"]); offline.audit()
+for n, f in [("env", env), ("selftest", sel), ("validate", val), ("onboard", onb), ("library", lib), ("drug", drg), ("combo", cmb), ("population", popn), ("recreate", rec), ("stabilize", stab), ("docking", dck), ("discover", dsc), ("repurpose", rep), ("mechanism", mech), ("scale", scl), ("robust", rob), ("check", disc_chk)]: step(n, f)
 import scorecard; buf = io.StringIO()
 with contextlib.redirect_stdout(buf): scorecard.main(refresh=False)
 print(buf.getvalue()); open("medscope_out/scorecard.txt", "w").write(buf.getvalue()); json.dump(R, open("medscope_out/verify.json", "w"), indent=1)
