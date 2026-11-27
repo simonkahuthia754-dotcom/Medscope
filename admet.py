@@ -5,15 +5,15 @@ import os
 try:
     from admet_ai import ADMETModel
     HAVE = True
-except Exception:
-    HAVE = False
+except Exception as _e:
+    HAVE = False; ERR = repr(_e)[:300]
 _M = None
 clamp = lambda x, a, b: max(a, min(b, x))
 
 def predict(smiles):
     """list of SMILES -> {smiles: {property: value}} (model loads once)"""
     global _M
-    if not HAVE: raise RuntimeError("ADMET-AI not installed: pip install admet-ai")
+    if not HAVE: raise RuntimeError("ADMET-AI unavailable: " + globals().get("ERR", "not installed (pip install admet-ai)"))
     _M = _M or ADMETModel(); r = _M.predict(smiles=list(smiles))
     return {s: dict(v) for s, v in r.to_dict("index").items()} if hasattr(r, "to_dict") else {smiles[0]: dict(r)}
 

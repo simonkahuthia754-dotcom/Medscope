@@ -1,5 +1,8 @@
 name: scale
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      limit: {default: '400000'}
 jobs:
   scale:
     runs-on: ubuntu-latest
@@ -12,8 +15,8 @@ jobs:
         run: |
           conda install -y rdkit || true
           pip install admet-ai scikit-learn || true
-          python -c "import admet; print('ADMET-AI available:', admet.HAVE)"
+          python -c "import admet; print('ADMET-AI available:', admet.HAVE, getattr(admet, 'ERR', ''))"
       - shell: bash -el {0}
         run: |
-          python screen.py all --limit 400000 --top 8 2>&1 | tail -150
+          python screen.py all --limit ${{ github.event.inputs.limit }} --top 8 2>&1 | tail -150
           python evolve.py lung-cancer --gens 6 2>&1 | tail -30
