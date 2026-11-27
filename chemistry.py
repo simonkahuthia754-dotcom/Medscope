@@ -24,7 +24,12 @@ LEAD_SMILES = {
     "linezolid": "CC(=O)NC[C@H]1CN(c2ccc(N3CCOCC3)c(F)c2)C(=O)O1",
 }
 EDITS = ["[c;H1:1]>>[c:1]F", "[c;H1:1]>>[c:1]Cl", "[c;H1:1]>>[c:1]C", "[c;H1:1]>>[c:1]OC", "[F:1]>>[Cl:1]", "[Cl:1]>>[F:1]",
-         "[CH3:1][c:2]>>[CH2:1](F)[c:2]", "[OH:1][CH2:2]>>[F:1][CH2:2]", "[c;H1:1]>>[c:1]C#N", "[NH2:1][c:2]>>[OH:1][c:2]"]
+         "[CH3:1][c:2]>>[CH2:1](F)[c:2]", "[OH:1][CH2:2]>>[F:1][CH2:2]", "[c;H1:1]>>[c:1]C#N", "[NH2:1][c:2]>>[OH:1][c:2]",
+         # medicinal-chemistry transformations that typically cut hERG / liver / genotox liabilities: add polarity, remove lipophilic or reactive groups, scan ring nitrogens
+         "[c;H1:1]>>[n:1]", "[c;H1:1]>>[c:1]O", "[c;H1:1]>>[c:1]C(N)=O", "[c;H1:1]>>[c:1]C(=O)O", "[c;H1:1]>>[c:1]C(F)(F)F", "[c;H1:1]>>[c:1]S(N)(=O)=O", "[c;H1:1]>>[c:1]CO",
+         "[CH3:1][c:2]>>[CH2:1](O)[c:2]", "[CH3:1][c:2]>>[H][c:2]", "[c:1][Cl]>>[c:1]C(F)(F)F", "[c:1][Cl]>>[c:1]C#N", "[c:1][Br]>>[c:1]F", "[c:1][Br]>>[c:1]Cl", "[c:1][O:2][CH3]>>[c:1][O:2]",
+         "[O;X2:1][CH3:2]>>[O:1]", "[N;X3;!$(N-C=O);!$(N-c):1][CH3]>>[N:1]", "[N;X3;!$(N-C=O);!$(N-c):1][CH3]>>[N:1]C(C)=O", "[CH2;!R:1]>>[C;!R:1](F)F",
+         "[C:1]#[CH:2]>>[C:1]=[CH2:2]", "[CH2;R:1]>>[O;R:1]", "[CH2;R:1]>>[NH;R:1]", "[CH3;!$(C-[!#6;!#1]):1]>>[CH2:1]O", "[N;X3;H1;!$(N-C=O):1]>>[N:1]C(C)=O"]
 
 def need():
     if not HAVE: raise RuntimeError("RDKit not installed. On a PC/Colab: pip install rdkit  (not available on QPython/Android)")
@@ -66,7 +71,9 @@ def fp(m):
 def edits(m, rng, per=6):
     out = set()
     for sm in EDITS:
-        rx = AllChem.ReactionFromSmarts(sm); prods = set()
+        try: rx = AllChem.ReactionFromSmarts(sm)
+        except Exception: continue
+        prods = set()
         for ps in rx.RunReactants((m,)):
             try: p = ps[0]; Chem.SanitizeMol(p); prods.add(Chem.MolToSmiles(p))
             except Exception: pass
