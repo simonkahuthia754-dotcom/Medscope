@@ -9,7 +9,8 @@ jobs:
       - uses: conda-incubator/setup-miniconda@v3
         with: {python-version: "3.11", channels: "conda-forge", channel-priority: strict}
       - shell: bash -el {0}
-        run: conda install -y rdkit || true
+        run: |
+          conda install -y rdkit || true
           pip install admet-ai scikit-learn || true
           python -c "import admet; print('ADMET-AI available:', admet.HAVE)"
       - shell: bash -el {0}
