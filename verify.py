@@ -34,6 +34,8 @@ def dck():
         T = docking.prepare(D["pdb"]); print("prepared", T["lig"], T["center"], T["size"])
         r = docking.redock_rmsd(T); print("redock (score, RMSD A, cluster size, runs):", r)
         if r: state.record("redock_rmsd", round(r[1], 2))
+        rate, n, rows = docking.panel_redock(); print("PANEL redock success (<=2 A):", rate, "of", n)
+        if rate is not None and n >= 5: state.record("redock_rate", round(rate, 2)); state.record("redock_n", n)
         data = potency.fetch(D["chembl"]); cal = docking.calibrate(T, data); print("calibration", {k: v for k, v in cal.items() if k != "pts"}); 
         if cal.get("rho") is not None: state.record("dock_rho", round(cal["rho"], 2))
     except BaseException: print(traceback.format_exc()[-1800:]); raise

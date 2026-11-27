@@ -1,16 +1,10 @@
-import sys, traceback
-def sect(n): print("\n##", n, flush=True)
-sect("expression")
-try:
-    import humanbio
-    for s in ("EGFR", "CCR5", "ABL1"): print(s, humanbio.target_expression(s))
-except BaseException: print(traceback.format_exc()[-900:])
-sect("pk")
-try:
-    import validate; validate.run(False); validate.run(True)
-except BaseException: print(traceback.format_exc()[-1500:])
-sect("docking")
-try:
-    import docking
-    T = docking.prepare("1M17"); print("consensus redock (score, RMSD, cluster, runs):", docking.redock_rmsd(T))
-except BaseException: print(traceback.format_exc()[-1500:])
+import json, traceback
+import humanbio
+def q(s, v=None):
+    try: return humanbio._gql(s, v or {})
+    except BaseException: return traceback.format_exc()[-400:]
+r = q('query($q:String!){search(queryString:$q,entityNames:["target"],page:{index:0,size:1}){hits{id}}}', {"q": "EGFR"}); print(r)
+i = r["data"]["search"]["hits"][0]["id"]
+print(json.dumps(q("query($id:String!){target(ensemblId:$id){baselineExpression{rows{tissueBiosampleFromSource tissueBiosampleId median unit datatypeId datasourceId}}}}", {"id": i}))[:1800])
+print(json.dumps(q('{__type(name:"BaselineExpression"){fields{name type{name kind ofType{name}}}}}'))[:800])
+print(json.dumps(q('{__type(name:"Target"){fields{name}}}'))[:1500])

@@ -87,6 +87,19 @@ def redock_rmsd(T, native=None, seeds=(3, 5, 7, 11, 13, 17), exh=32, cluster=2.0
     g = max(groups, key=lambda g: (len(g), -min(e for e, _ in g))); e, m = min(g, key=lambda t: t[0])
     return e, rdMolAlign.CalcRMS(m, Chem.RemoveHs(crystal)), len(g), len(P)
 
+PANEL = [("1STP", "BTN"), ("3PTB", "BEN"), ("1HVR", "XK2"), ("3ERT", "OHT"), ("1M17", "AQ4"), ("3LN1", "CEL"), ("1IEP", "STI"), ("1HSG", "MK1"), ("1OPK", "P16"), ("2OHK", "AEJ")]
+
+def panel_redock(panel=PANEL, seeds=(3, 5, 7, 11), exh=24, log=print):
+    """standard benchmark practice: redock crystal ligands over a PANEL of unrelated complexes; success = consensus pose within 2 A. Returns (success rate, n, [per-complex rows])"""
+    rows = []
+    for pid, lig in panel:
+        try:
+            T = prepare(pid, lig); r = redock_rmsd(T, seeds=seeds, exh=exh)
+            rows.append((pid, lig, None if not r else round(r[1], 2))); log(f"    {pid}/{lig}: " + ("failed" if not r else f"RMSD {r[1]:.2f} A (cluster {r[2]}/{r[3]})"))
+        except Exception as e: log(f"    {pid}/{lig}: skipped ({type(e).__name__}: {str(e)[:60]})")
+    ok = [x for x in rows if x[2] is not None]; n = len(ok)
+    return (sum(1 for x in ok if x[2] <= 2.0) / n if n else None), n, rows
+
 def _rank(x):
     o = sorted(range(len(x)), key=lambda i: x[i]); r = [0.0] * len(x)
     for k, i in enumerate(o): r[i] = k

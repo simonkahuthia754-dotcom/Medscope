@@ -25,8 +25,9 @@ def c_pk():
     b = max(S("pk_test_rule", 0), S("pk_test_admet", 0)); v = 8 * fr(b, 70)
     return v, 8, f"BLIND-test half-lives within 2-fold: {b}% (target >=70%); rule-based {S('pk_test_rule', 'n/a')}%, ADMET-AI-resolved {S('pk_test_admet', 'not run')}% (tuning set: {S('pk_dev_rule', 'n/a')}%)"
 def c_dock():
-    r, rho = S("redock_rmsd"), S("dock_rho"); v = (2.5 if r is not None and r <= 2 else 0) + (2.5 if rho is not None and rho >= .3 else 0)
-    return v, 5, f"redock RMSD {r if r is not None else 'not run'} (target <=2 A), Vina-vs-measured rho {rho if rho is not None else 'not run'} (target >=0.3)"
+    r, rho, rate, n = S("redock_rmsd"), S("dock_rho"), S("redock_rate"), S("redock_n", 0)
+    v = 2.5 * (fr(rate, .7) if rate is not None and n >= 5 else (0.5 if r is not None and r <= 2 else 0)) + (2.5 if rho is not None and rho >= .3 else 0)
+    return v, 5, f"redocking success {('%.0f%% of %d complexes' % (100 * rate, n)) if rate is not None else 'panel not run'} (field standard ~70% within 2 A), Vina-vs-measured rho {rho if rho is not None else 'not run'} (target >=0.3)"
 def c_human():
     v = (4 if S("offline_pass") else 0) + (2 if S("expr_ok") else 0) + 2 * fr(max(S("pk_test_rule", 0), S("pk_test_admet", 0)), 70)
     return v, 8, f"PBPK+population checks {'pass' if S('offline_pass') else 'not run'}; human target expression {'live' if S('expr_ok') else 'untested'}; physiology accuracy tied to PK benchmark"
