@@ -115,13 +115,15 @@ def rescore(model, hits, keep=200):
     import admet, stabilizer
     sm = [s for _, _, s in hits[:keep]]
     if not sm: return []
-    ad = admet.predict(sm); out = []
+    try: ad = admet.predict(sm)
+    except Exception as e: print(f"  (organ-risk scoring unavailable: {e}; ranking by potency only)"); ad = None
+    out = []
     for sc, cid, s in hits[:keep]:
-        rk, tox = stabilizer.risks(ad[s]); known = None
+        rk, tox = stabilizer.risks(ad[s]) if ad else ({}, None); known = None
         try:
             import potency; st = potency.standardize(s); known = model["data"].get(st)
         except Exception: pass
-        out.append(dict(id=cid, smiles=s, pic50=sc, measured=known, tox=tox, flags=admet.flags(ad[s]), rank=(min(1, max(0, (sc - 5) / 4)) * .6 + (1 - (tox if tox is not None else .5)) * .4)))
+        out.append(dict(id=cid, smiles=s, pic50=sc, measured=known, tox=tox, flags=admet.flags(ad[s]) if ad else [], rank=(min(1, max(0, (sc - 5) / 4)) * .6 + (1 - (tox if tox is not None else .5)) * .4)))
     return sorted(out, key=lambda r: -r["rank"])
 
 def run(keys=None, limit=None, top=15, show=True):

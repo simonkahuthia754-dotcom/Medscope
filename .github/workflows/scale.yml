@@ -7,9 +7,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: conda-incubator/setup-miniconda@v3
-        with: {python-version: "3.11", channels: conda-forge}
+        with: {python-version: "3.11", channels: "conda-forge", channel-priority: strict}
       - shell: bash -el {0}
-        run: conda install -y rdkit scikit-learn && pip install admet-ai
+        run: conda install -y rdkit || true
+          pip install admet-ai scikit-learn || true
+          python -c "import admet; print('ADMET-AI available:', admet.HAVE)"
       - shell: bash -el {0}
         run: |
           python screen.py all --limit 400000 --top 8 2>&1 | tail -150
