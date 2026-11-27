@@ -53,7 +53,11 @@ def rep(): import library; library.repurpose("blood-cancer", 10)
 def mech(): import reverse_bioengineering as rb; rb.analyze("HIV infection", key="hiv")
 def disc_chk(): import diseases; diseases.check("lung-cancer")
 def scl():
-    import screen, evolve; r = screen.run(["lung-cancer", "flu", "fungi"], limit=int(os.environ.get("SCREEN_LIMIT", "300000")), top=5); evolve.evolve("lung-cancer", gens=5, pop=150, top=5)
+    import screen, evolve, diseases, state; r = screen.run(None, limit=int(os.environ.get("SCREEN_LIMIT", "300000")), top=5, show=False); tot = 0
+    for k in list(r)[:6]:
+        try: e = evolve.evolve(k, gens=8, pop=300, seeds=25, top=3, show=False); tot += e["novel"]; print(f"  evolved {k}: {e['novel']} novel molecules")
+        except Exception as ex: print(f"  evolve {k}: {ex}")
+    state.record("evolve_novel", tot); print(f"  screened diseases {len(r)}, novel generated {tot}")
 def rob():
     import offline; offline.prefetch(["lung-cancer"]); offline.audit()
 for n, f in [("env", env), ("selftest", sel), ("validate", val), ("onboard", onb), ("library", lib), ("drug", drg), ("combo", cmb), ("population", popn), ("recreate", rec), ("stabilize", stab), ("docking", dck), ("discover", dsc), ("repurpose", rep), ("mechanism", mech), ("scale", scl), ("robust", rob), ("check", disc_chk)]: step(n, f)

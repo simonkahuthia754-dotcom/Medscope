@@ -91,7 +91,8 @@ def stabilize(smi, ic50_nM=None, model=None, n=40, ancestry="african", show=True
             from rdkit import DataStructs
             import chemistry; pr["sim"] = DataStructs.TanimotoSimilarity(chemistry.fp(chemistry.mol(smi)), chemistry.fp(chemistry.mol(s_))); rows.append(pr)
     expand(smi, n)                                         # generation 1
-    for r in sorted(rows, key=score)[:5]: expand(r["smiles"], max(10, n // 2))   # generation 2: edit the five best again (greedy multi-step optimisation)
+    for gen in (2, 3, 4):                                  # generations 2-4: edit the best again and again (greedy multi-step optimisation)
+        for r in sorted(rows, key=score)[:6]: expand(r["smiles"], max(12, n // 2))
     rows.sort(key=score); res = {"base": base, "best": None, "analogs_tested": tested, "kept": len(rows)}
     best = rows[0] if rows and rows[0]["tox"] is not None and base["tox"] is not None and rows[0]["tox"] < base["tox"] else None
     ic = ic50_nM or 10.0; res["best"] = best
