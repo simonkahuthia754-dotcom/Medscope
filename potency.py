@@ -16,11 +16,11 @@ def standardize(smi):
         return Chem.MolToSmiles(rdMolStandardize.LargestFragmentChooser().choose(m)) if m else None
     except Exception: return smi
 
-def fetch(chembl_target, max_n=4000, overlay=None):
+def fetch(chembl_target, max_n=4000, overlay=None, types=("IC50",)):
     """-> {smiles: pIC50}: ChEMBL measurements, cleaned + deduplicated, then overlaid with lab data (lab values win)"""
     rows, off = {}, 0
     while off < max_n:
-        a = sources.J(f"https://www.ebi.ac.uk/chembl/api/data/activity.json?target_chembl_id={chembl_target}&standard_type=IC50&standard_units=nM"
+        a = sources.J(f"https://www.ebi.ac.uk/chembl/api/data/activity.json?target_chembl_id={chembl_target}&{'standard_type=IC50' if types == ('IC50',) else 'standard_type__in=' + ','.join(types)}&standard_units=nM"
                       f"&standard_relation=%3D&limit=1000&offset={off}")["activities"]
         for x in a:
             try:

@@ -82,7 +82,9 @@ def train(key, n_trees=100, seed=7):
     from sklearn.ensemble import RandomForestRegressor
     D = diseases.get(key); best = None
     for cid, nm in candidates(D):
-        try: data = potency.fetch(cid, overlay=lab.training_overlay(D["key"]))
+        try:
+            data = potency.fetch(cid, overlay=lab.training_overlay(D["key"]))
+            if len(data) < 80: data = potency.fetch(cid, overlay=lab.training_overlay(D["key"]), types=("IC50", "Ki", "Kd", "EC50"))   # thin IC50 data: pool other potency measures
         except Exception: continue
         if len(data) >= 80 and (best is None or len(data) > len(best[2])): best = (cid, nm, data)
         if best and len(best[2]) >= 400: break
