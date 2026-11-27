@@ -53,9 +53,10 @@ def target_expression(symbol):
     """human target expression per organ (Open Targets RNA level) + recorded safety liabilities -> ({organ: level}, [events])"""
     h = _gql('query($q:String!){search(queryString:$q,entityNames:["target"],page:{index:0,size:1}){hits{id}}}', {"q": symbol})["data"]["search"]["hits"]
     if not h: return {}, []
-    t = _gql("query($id:String!){target(ensemblId:$id){baselineExpression{rows{tissueBiosampleFromSource median unit datatypeId}} safetyLiabilities{event}}}", {"id": h[0]["id"]})["data"]["target"]
+    t = _gql("query($id:String!){target(ensemblId:$id){baselineExpression(page:{index:0,size:2000}){rows{tissueBiosampleFromSource median unit datatypeId datasourceId}} safetyLiabilities{event}}}", {"id": h[0]["id"]})["data"]["target"]
     lv = {}
     for e in ((t.get("baselineExpression") or {}).get("rows") or []):
+        if e.get("datatypeId") != "bulk rna-seq" or (e.get("unit") or "") != "TPM": continue      # GTEx bulk TPM only (single-cell CPM rows are not comparable)
         lab = (e.get("tissueBiosampleFromSource") or "").lower(); med = e.get("median") or 0; l = int(math.log10(1 + max(med, 0)) * 2)   # level 0-10 from median expression (TPM-like): 10 TPM ~2, 30 ~3, 100 ~4
         for o, keys in ORGAN_MAP.items():
             if any(k in lab for k in keys): lv[o] = max(lv.get(o, 0), l)
