@@ -63,21 +63,38 @@ def vec(smi):
     m = Chem.MolFromSmiles(smi)
     return None if m is None else np.minimum(rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=1024).GetCountFingerprintAsNumPy(m), 255).astype(np.uint8)
 
+def candidates(D):
+    """ChEMBL target ids to try for a disease: the fixed id, else every protein hit of the name search (best-measured one wins)"""
+    import sources
+    if D.get("chembl"): return [(D["chembl"], D["target"])]
+    out = []
+    for q in (D["target"], D["target"].split("(")[0].strip(), D["name"]):
+        try:
+            for t in sources.J(f"https://www.ebi.ac.uk/chembl/api/data/target/search.json?q={sources.Q(q)}&limit=12")["targets"]:
+                if t.get("target_type") in ("SINGLE PROTEIN", "PROTEIN COMPLEX", "ORGANISM") and (t["target_chembl_id"], t["pref_name"]) not in out: out.append((t["target_chembl_id"], t["pref_name"]))
+        except Exception: pass
+    return out[:8]
+
 def train(key, n_trees=100, seed=7):
-    """random forest on MEASURED ChEMBL pIC50 for this disease's target -> (model, training dict, strict-CV rmse) or None"""
+    """random forest on MEASURED ChEMBL pIC50 for this disease's target -> model dict (with strict-CV error) or None"""
     import numpy as np, diseases, lab, potency
     from sklearn.ensemble import RandomForestRegressor
-    D = diseases.get(key); cid, nm = diseases.resolve_chembl(D)
-    if not cid: return None
-    data = potency.fetch(cid, overlay=lab.training_overlay(D["key"])); rows = [(s, y, vec(s)) for s, y in data.items()]; rows = [r for r in rows if r[2] is not None]
+    D = diseases.get(key); best = None
+    for cid, nm in candidates(D):
+        try: data = potency.fetch(cid, overlay=lab.training_overlay(D["key"]))
+        except Exception: continue
+        if len(data) >= 80 and (best is None or len(data) > len(best[2])): best = (cid, nm, data)
+        if best and len(best[2]) >= 400: break
+    if not best: return None
+    cid, nm, data = best; rows = [(s, y, vec(s)) for s, y in data.items()]; rows = [r for r in rows if r[2] is not None]
     if len(rows) < 80: return None
     X = np.array([r[2] for r in rows], dtype=np.float32); y = np.array([r[1] for r in rows])
     rf = RandomForestRegressor(n_estimators=n_trees, min_samples_leaf=1, max_features=.3, n_jobs=-1, random_state=seed).fit(X, y)
     cv = None
     try:
-        M = potency.Model(data); cv = (M.rmse_c, M.auc_c)
+        M = potency.Model(data); cv = (round(M.rmse_c, 2) if M.rmse_c else None, round(float(M.auc_c), 2) if M.auc_c else None)
     except Exception: pass
-    return dict(key=D["key"], name=D["name"], target=nm, rf=rf, data=data, n=len(rows), cv=cv)
+    return dict(key=D["key"], name=D["name"], target=f"{nm} [{cid}]", rf=rf, data=data, n=len(rows), cv=cv)
 
 def scan(models, limit=None, top=500, block=60000, log=print):
     """one pass over the library for ALL diseases; returns ({key: [(score, id, smiles)]}, n_streamed, n_scored)"""

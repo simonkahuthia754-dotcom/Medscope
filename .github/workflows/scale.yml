@@ -13,8 +13,7 @@ jobs:
         with: {python-version: "3.11", channels: "conda-forge", channel-priority: strict}
       - shell: bash -el {0}
         run: |
-          conda install -y rdkit || true
-          pip install admet-ai scikit-learn || true
+          pip install rdkit admet-ai scikit-learn || true
           python -c "import admet; print('ADMET-AI available:', admet.HAVE, getattr(admet, 'ERR', ''))"
       - shell: bash -el {0}
         run: |
