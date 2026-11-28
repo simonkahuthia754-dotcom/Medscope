@@ -90,7 +90,8 @@ def stabilize(smi, ic50_nM=None, model=None, n=40, ancestry="african", show=True
             seen[s_] = pr
             if model is not None and base["pic50"] is not None and pr["pic50"] is not None and pr["pic50"] < base["pic50"] - .5: continue   # keep potency
             from rdkit import DataStructs
-            import chemistry; pr["sim"] = DataStructs.TanimotoSimilarity(chemistry.fp(chemistry.mol(smi)), chemistry.fp(chemistry.mol(s_))); rows.append(pr)
+            import chemistry; pr["sim"] = DataStructs.TanimotoSimilarity(chemistry.fp(chemistry.mol(smi)), chemistry.fp(chemistry.mol(s_)))
+            if pr["sim"] >= .5 and s_.count("C#N") <= max(1, smi.count("C#N") + 1): rows.append(pr)   # stay recognisably the parent drug; no stacked-nitrile artefacts
     expand(smi, n)                                         # generation 1
     for gen in (2, 3, 4):                                  # generations 2-4: edit the best again and again (greedy multi-step optimisation)
         for r in sorted(rows, key=score)[:6]: expand(r["smiles"], max(12, n // 2))
